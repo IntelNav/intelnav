@@ -28,3 +28,6 @@ tower-http    = { workspace = true }
 reqwest       = { workspace = true }
 async-trait   = { workspace = true }
 async-stream  = { workspace = true }
+
+[dev-dependencies]
+http-body-util = "0.1"

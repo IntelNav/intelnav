@@ -10,7 +10,9 @@
 //! | GET    | `/v1/models`              | Union of upstream + P2P-discovered.    |
 //! | GET    | `/v1/network/peers`       | Every known peer across directories.   |
 //! | GET    | `/v1/network/health`      | Gateway liveness + counts.             |
-//! | GET    | `/`                       | Friendly banner.                       |
+//! | GET    | `/v1/swarm/topology`      | SPA-friendly snapshot of the swarm.    |
+//! | GET    | `/`                       | Single-file demo SPA (chat + topo).    |
+//! | GET    | `/banner`                 | Plain-text health banner.              |
 //!
 //! The `intelnav` request extension (paper §10) is parsed and surfaced to
 //! the route planner; today it is honored best-effort and logged.

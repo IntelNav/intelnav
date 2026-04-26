@@ -206,6 +206,97 @@ fn now_s() -> u64 {
 }
 
 // ----------------------------------------------------------------------
+//  /v1/swarm/topology — SPA-friendly snapshot of who's in the swarm
+// ----------------------------------------------------------------------
+
+/// One node visible to the gateway. Either the gateway itself or a
+/// peer it learned about through one of its directories.
+#[derive(Serialize)]
+pub struct SwarmNode {
+    /// `gateway` for self, otherwise the peer's short id.
+    pub id:        String,
+    /// `gateway` | `volunteer` | `cloud`.
+    pub kind:      &'static str,
+    /// First reachable address — for display ("192.168.1.4:7717").
+    pub addr:      String,
+    /// Best tok/s the gateway has seen this node hit.
+    pub tok_per_s: f32,
+    /// Models advertised by this node.
+    pub models:    Vec<String>,
+    /// Which directory surfaced this peer (`static`, `mdns`, `dht`,
+    /// `registry`). `self` for the gateway node.
+    pub source:    String,
+}
+
+#[derive(Serialize)]
+pub struct SwarmTopology {
+    pub gateway:    SwarmNode,
+    pub peers:      Vec<SwarmNode>,
+    /// Models the gateway can serve right now (union of upstream +
+    /// peer advertisements). Same shape as `/v1/models` data, just
+    /// flatter — the SPA renders these as cards.
+    pub models:     Vec<String>,
+    pub uptime_sec: u64,
+    pub upstream:   String,
+}
+
+pub async fn swarm_topology(State(s): State<GatewayState>) -> Json<SwarmTopology> {
+    let gateway = SwarmNode {
+        id:        "gateway".to_string(),
+        kind:      "gateway",
+        addr:      s.config.gateway_bind.clone(),
+        tok_per_s: 0.0,
+        models:    vec![],
+        source:    "self".to_string(),
+    };
+
+    let mut peers: Vec<SwarmNode> = Vec::new();
+    for dir in s.directories() {
+        let dir_name = dir.name().to_string();
+        for rec in dir.all().await {
+            let kind = match rec.capability.role {
+                Role::Volunteer => "volunteer",
+                Role::Cloud     => "cloud",
+            };
+            peers.push(SwarmNode {
+                id:        rec.peer_id.short(),
+                kind,
+                addr:      rec.addrs.first().cloned().unwrap_or_default(),
+                tok_per_s: rec.capability.tok_per_sec,
+                models:    rec.capability.models.iter().map(|m| m.0.clone()).collect(),
+                source:    dir_name.clone(),
+            });
+        }
+    }
+
+    let mut model_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for p in &peers {
+        for m in &p.models {
+            model_set.insert(m.clone());
+        }
+    }
+
+    Json(SwarmTopology {
+        gateway,
+        peers,
+        models:     model_set.into_iter().collect(),
+        uptime_sec: s.started_at.elapsed().as_secs(),
+        upstream:   s.config.upstream_url.clone(),
+    })
+}
+
+// ----------------------------------------------------------------------
+//  / — single-file demo SPA (chat + swarm topology)
+// ----------------------------------------------------------------------
+
+/// Minimal HTML+CSS+JS demo baked into the binary. Served at `/`.
+/// No build step, no node_modules — vanilla JS over `fetch` and
+/// the existing OpenAI-compatible streaming surface.
+pub async fn demo_index() -> impl IntoResponse {
+    axum::response::Html(include_str!("../static/index.html"))
+}
+
+// ----------------------------------------------------------------------
 //  /v1/chat/completions
 // ----------------------------------------------------------------------
 

@@ -19,10 +19,14 @@ use crate::state::GatewayState;
 /// Build the axum router.
 pub fn router(state: GatewayState) -> Router {
     Router::new()
-        .route("/",                     get(api::banner))
+        // Demo SPA at `/`; the plaintext banner moves to `/banner` so
+        // `curl gateway:8787` still works without HTML soup.
+        .route("/",                     get(api::demo_index))
+        .route("/banner",               get(api::banner))
         .route("/v1/models",            get(api::list_models))
         .route("/v1/network/peers",     get(api::peers))
         .route("/v1/network/health",    get(api::health))
+        .route("/v1/swarm/topology",    get(api::swarm_topology))
         .route("/v1/chat/completions",  post(api::chat_completions))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

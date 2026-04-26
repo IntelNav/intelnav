@@ -1855,6 +1855,7 @@ dependencies = [
  "bytes",
  "futures",
  "futures-util",
+ "http-body-util",
  "intelnav-core",
  "intelnav-crypto",
  "intelnav-net",
