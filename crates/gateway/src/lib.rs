@@ -20,8 +20,10 @@
 #![forbid(unsafe_code)]
 
 pub mod api;
+pub mod driver;
 pub mod server;
 pub mod state;
 
+pub use driver::{Delta, GatewayDriver};
 pub use server::run;
 pub use state::GatewayState;

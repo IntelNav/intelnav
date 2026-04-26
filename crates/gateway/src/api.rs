@@ -512,6 +512,11 @@ pub async fn chat_completions(
             .into_response();
     }
 
+    // --- chain-mode: drive the configured peer chain locally ---
+    if let Some(driver) = s.driver.clone() {
+        return chat_through_chain(driver, req).await.into_response();
+    }
+
     // --- forward to upstream (Ollama/LM Studio/vLLM speaks OpenAI) ---
     let upstream = format!("{}/v1/chat/completions", s.config.upstream_url.trim_end_matches('/'));
     let mut body = serde_json::json!({
@@ -558,6 +563,144 @@ pub async fn chat_completions(
     Sse::new(sse_stream)
         .keep_alive(axum::response::sse::KeepAlive::default())
         .into_response()
+}
+
+/// Drive one chat turn through [`GatewayDriver`] and stream the
+/// tokens back as OpenAI-shape SSE deltas. Each on-token chunk
+/// becomes one `data: {…}` frame the SPA's existing chat path
+/// already understands; a final `data: [DONE]` closes the stream.
+async fn chat_through_chain(
+    driver: crate::driver::GatewayDriver,
+    req:    ChatRequest,
+) -> axum::response::Response {
+    use crate::driver::Delta;
+    use axum::response::Response;
+    use intelnav_runtime::SamplingCfg;
+
+    // Map the OpenAI-shape messages to (role, content) pairs so the
+    // driver can render them through build_chat_prompt.
+    let messages: Vec<(String, String)> = req.messages.iter()
+        .map(|m| (m.role.clone(), m.content.clone()))
+        .collect();
+    if messages.is_empty() {
+        return upstream_err_with(
+            StatusCode::BAD_REQUEST,
+            "messages must be non-empty".into(),
+        )
+            .into_response();
+    }
+
+    // Build a sampling config from whatever the request specified;
+    // fall back to SamplingCfg::default() for the unset knobs so a
+    // client that just sends `messages` still gets sane behaviour.
+    let mut cfg = SamplingCfg::default();
+    if let Some(t) = req.temperature {
+        cfg.temperature = t as f64;
+    }
+    let mut rx = driver.stream(messages, cfg);
+
+    // ---- non-streaming: collect every token, return one JSON ----
+    if !req.stream {
+        let mut acc = String::new();
+        while let Some(d) = rx.recv().await {
+            match d {
+                Delta::Token(t) => acc.push_str(&t),
+                Delta::Done     => break,
+                Delta::Error(e) => return upstream_err(format!("chain: {e}")).into_response(),
+            }
+        }
+        let body = serde_json::json!({
+            "id":      format!("intelnav-{}", now_s()),
+            "object":  "chat.completion",
+            "created": now_s(),
+            "model":   req.model,
+            "choices": [{
+                "index":   0,
+                "message": {
+                    "role":    "assistant",
+                    "content": acc,
+                },
+                "finish_reason": "stop",
+            }],
+        });
+        return (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            serde_json::to_vec(&body).unwrap_or_default(),
+        )
+            .into_response();
+    }
+
+    // ---- streaming: bridge the mpsc to OpenAI-shape SSE ----
+    let id = format!("intelnav-{}", now_s());
+    let model = req.model.clone();
+    let stream = async_stream::stream! {
+        // Initial frame with the role — matches how OpenAI starts an
+        // assistant turn so the SPA's "first chunk" branding works.
+        let head = serde_json::json!({
+            "id":      id,
+            "object":  "chat.completion.chunk",
+            "created": now_s(),
+            "model":   model,
+            "choices": [{
+                "index":   0,
+                "delta":   { "role": "assistant" },
+                "finish_reason": null,
+            }],
+        });
+        yield Ok::<_, Infallible>(Event::default().data(head.to_string()));
+
+        while let Some(d) = rx.recv().await {
+            match d {
+                Delta::Token(text) => {
+                    let frame = serde_json::json!({
+                        "id":      id,
+                        "object":  "chat.completion.chunk",
+                        "created": now_s(),
+                        "model":   model,
+                        "choices": [{
+                            "index":   0,
+                            "delta":   { "content": text },
+                            "finish_reason": null,
+                        }],
+                    });
+                    yield Ok(Event::default().data(frame.to_string()));
+                }
+                Delta::Done => {
+                    let tail = serde_json::json!({
+                        "id":      id,
+                        "object":  "chat.completion.chunk",
+                        "created": now_s(),
+                        "model":   model,
+                        "choices": [{
+                            "index":   0,
+                            "delta":   {},
+                            "finish_reason": "stop",
+                        }],
+                    });
+                    yield Ok(Event::default().data(tail.to_string()));
+                    yield Ok(Event::default().data("[DONE]"));
+                    break;
+                }
+                Delta::Error(msg) => {
+                    let frame = serde_json::json!({
+                        "error": {
+                            "code":    "chain_error",
+                            "message": msg,
+                        }
+                    });
+                    yield Ok(Event::default().data(frame.to_string()));
+                    yield Ok(Event::default().data("[DONE]"));
+                    break;
+                }
+            }
+        }
+    };
+
+    let resp: Response = Sse::new(stream)
+        .keep_alive(axum::response::sse::KeepAlive::default())
+        .into_response();
+    resp
 }
 
 fn upstream_err(msg: String) -> impl IntoResponse {

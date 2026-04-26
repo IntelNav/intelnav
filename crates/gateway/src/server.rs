@@ -15,6 +15,8 @@ use intelnav_core::{Config, ModelId, PeerId, Result};
 use intelnav_net::{DhtDirectory, MdnsDirectory, PeerRecord, RegistryDirectory, StaticDirectory};
 use intelnav_runtime::{StepEvent, StepPhase, Telemetry};
 
+use crate::driver::{gateway_model_path, GatewayDriver};
+
 use crate::api;
 use crate::state::GatewayState;
 
@@ -189,7 +191,35 @@ pub async fn run(config: Config, enable_mdns: bool) -> Result<()> {
     seed_static_directory(&static_dir, &config);
 
     let telemetry = Telemetry::default();
-    spawn_synth_heartbeat(telemetry.clone(), config.peers.clone());
+
+    // Chain-mode driver: opt-in via INTELNAV_GATEWAY_MODEL=/path/to.gguf.
+    // When loaded, /v1/chat/completions runs the configured peer chain
+    // locally instead of proxying. Failure to load is a hard error —
+    // an operator who set the env var clearly meant for the gateway to
+    // drive a chain; silently falling back to the proxy would hide the
+    // mistake.
+    let driver = if let Some(gguf) = gateway_model_path() {
+        match GatewayDriver::load(&gguf, &config, telemetry.clone()) {
+            Ok(d) => {
+                tracing::info!(model = %gguf.display(), "gateway: chain-mode driver ready");
+                Some(d)
+            }
+            Err(e) => {
+                tracing::error!(?e, model = %gguf.display(),
+                                "gateway: failed to load chain-mode driver");
+                return Err(intelnav_core::Error::Config(e.to_string()));
+            }
+        }
+    } else {
+        None
+    };
+
+    // Synth heartbeat only when no real driver is publishing — keeps
+    // the SSE stream honest. Real events will flow through the same
+    // Telemetry handle once the driver runs a chat turn.
+    if driver.is_none() {
+        spawn_synth_heartbeat(telemetry.clone(), config.peers.clone());
+    }
 
     let state = GatewayState {
         config:     Arc::new(config.clone()),
@@ -210,6 +240,7 @@ pub async fn run(config: Config, enable_mdns: bool) -> Result<()> {
         registry_dir,
         started_at: std::time::Instant::now(),
         telemetry,
+        driver,
     };
 
     let addr: SocketAddr = config

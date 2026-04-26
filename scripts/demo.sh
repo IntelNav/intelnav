@@ -20,7 +20,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GGUF="${GGUF:-/home/islam/IntelNav/models/qwen2.5-0.5b-instruct-q4_k_m.gguf}"
 LIBLLAMA_DIR="${INTELNAV_LIBLLAMA_DIR:-/home/islam/IntelNav/llama.cpp/build/bin}"
 N_LAYERS="${N_LAYERS:-24}"      # Qwen2.5-0.5B has 24 transformer blocks.
-SPLITS="${SPLITS:-8,16}"        # peer-1 owns [0..8), peer-2 [8..16), peer-3 [16..24).
+# SPLITS is the chain protocol's convention: one entry per peer,
+# specifying that peer's start layer. The gateway owns the prefix
+# [0..splits[0]) locally (embed + first slice + head); each peer i
+# owns [splits[i]..splits[i+1]), and the tail peer owns
+# [splits[N-1]..N_LAYERS). For Qwen2.5-0.5B (24 layers) the default
+# 6/12/18 puts ~6 layers on each side: gateway, peer-1, peer-2, peer-3.
+SPLITS="${SPLITS:-6,12,18}"
 PORTS=(7717 7718 7719)
 GATEWAY_PORT="${GATEWAY_PORT:-8787}"
 LOG_DIR="${LOG_DIR:-$ROOT/target/demo-logs}"
@@ -41,17 +47,22 @@ die() { echo "demo: $*" >&2; exit 1; }
 
 mkdir -p "$LOG_DIR"
 
-# Parse the SPLITS list into peer ranges. With N_LAYERS=24 and
-# SPLITS="8,16" we get ranges "0..8", "8..16", "16..24" — three peers,
-# eight layers each.
+# Parse SPLITS (chain protocol convention: one entry per peer = that
+# peer's start layer). With SPLITS="6,12,18" and N_LAYERS=24 the
+# gateway owns [0..6) locally, peer-1 owns [6..12), peer-2 [12..18),
+# peer-3 [18..24).
 IFS=',' read -ra split_arr <<< "$SPLITS"
 peer_ranges=()
-prev=0
-for s in "${split_arr[@]}"; do
-    peer_ranges+=("$prev:$s")
-    prev=$s
+for i in "${!split_arr[@]}"; do
+    start="${split_arr[$i]}"
+    next_idx=$((i + 1))
+    if (( next_idx < ${#split_arr[@]} )); then
+        end="${split_arr[$next_idx]}"
+    else
+        end="$N_LAYERS"
+    fi
+    peer_ranges+=("$start:$end")
 done
-peer_ranges+=("$prev:$N_LAYERS")
 
 [[ "${#peer_ranges[@]}" -eq "${#PORTS[@]}" ]] \
     || die "SPLITS=$SPLITS produced ${#peer_ranges[@]} ranges but we have ${#PORTS[@]} ports"
@@ -149,9 +160,12 @@ PEERS_CSV="$(IFS=,; echo "${PEER_ADDRS[*]}")"
 SPLITS_CSV="$SPLITS"
 
 # Export env vars Config picks up — registers the 3 peers in the
-# gateway's static directory so they show up in /v1/swarm/topology.
+# gateway's static directory so they show up in /v1/swarm/topology
+# and tells the gateway to drive the chain itself for chat
+# completions (vs proxying to upstream).
 export INTELNAV_PEERS="$PEERS_CSV"
 export INTELNAV_SPLITS="$SPLITS_CSV"
+export INTELNAV_GATEWAY_MODEL="$GGUF"
 
 start_child "gateway" \
     "$INTELNAV_BIN" gateway \

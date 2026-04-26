@@ -31,6 +31,7 @@ fn test_state() -> (GatewayState, Telemetry) {
         registry_dir: None,
         started_at: std::time::Instant::now(),
         telemetry:  telemetry.clone(),
+        driver:     None,
     };
     (state, telemetry)
 }
