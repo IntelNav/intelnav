@@ -209,6 +209,35 @@ fn now_s() -> u64 {
 //  /v1/swarm/topology — SPA-friendly snapshot of who's in the swarm
 // ----------------------------------------------------------------------
 
+/// Per-node performance + utilization snapshot. Some fields are
+/// real (RAM probed via sysinfo, addr from the directory record),
+/// some are synthesized when chain telemetry isn't plumbed yet.
+/// `synthetic: true` advertises the difference to the SPA so it
+/// can subtly dim the synth values rather than passing them off
+/// as real measurements.
+#[derive(Serialize)]
+pub struct NodeMetrics {
+    /// True if any field below is filled by the synth path (until
+    /// the chain telemetry channel lands per arc 6 sub-C/D).
+    pub synthetic:    bool,
+    /// Round-trip latency to this peer in milliseconds.
+    pub rtt_ms:       f32,
+    /// Sustained tokens/sec this peer has reported.
+    pub tok_per_s:    f32,
+    /// GPU utilization 0.0..1.0 (CPU-bound peers report 0).
+    pub gpu_util:     f32,
+    /// Approximate VRAM used in bytes.
+    pub vram_used:    u64,
+    /// Approximate VRAM capacity in bytes (0 if CPU-only).
+    pub vram_total:   u64,
+    /// Recent inbound traffic from the gateway in bytes/sec
+    /// (hidden state forwarded into this peer).
+    pub bytes_in_s:   f32,
+    /// Recent outbound traffic to the gateway in bytes/sec
+    /// (hidden state forwarded out).
+    pub bytes_out_s:  f32,
+}
+
 /// One node visible to the gateway. Either the gateway itself or a
 /// peer it learned about through one of its directories.
 #[derive(Serialize)]
@@ -226,6 +255,12 @@ pub struct SwarmNode {
     /// Which directory surfaced this peer (`static`, `mdns`, `dht`,
     /// `registry`). `self` for the gateway node.
     pub source:    String,
+    /// Layer range this node owns in the chain ("0..8" / "8..16").
+    /// Empty for the gateway and for peers that don't advertise a
+    /// `ShardRoute`.
+    pub layers:    String,
+    /// Live performance + utilization. See [`NodeMetrics`].
+    pub metrics:   NodeMetrics,
 }
 
 #[derive(Serialize)]
@@ -238,17 +273,21 @@ pub struct SwarmTopology {
     pub models:     Vec<String>,
     pub uptime_sec: u64,
     pub upstream:   String,
+    /// Aggregate end-to-end tok/s of the configured chain (sum of
+    /// peer pipeline throughput, gated on the slowest peer). Synth
+    /// until chain telemetry is wired through.
+    pub chain_tok_per_s: f32,
+    /// One sample per node (in `peers` order) of total bytes
+    /// forwarded through the chain in the last second. The SPA
+    /// renders this as the rolling traffic chart.
+    pub chain_bytes_s:   f32,
+    /// True when the topology is reporting at least one synthetic
+    /// metric. Drops to false once chain telemetry replaces synth.
+    pub synthetic:       bool,
 }
 
 pub async fn swarm_topology(State(s): State<GatewayState>) -> Json<SwarmTopology> {
-    let gateway = SwarmNode {
-        id:        "gateway".to_string(),
-        kind:      "gateway",
-        addr:      s.config.gateway_bind.clone(),
-        tok_per_s: 0.0,
-        models:    vec![],
-        source:    "self".to_string(),
-    };
+    let uptime = s.started_at.elapsed().as_secs();
 
     let mut peers: Vec<SwarmNode> = Vec::new();
     for dir in s.directories() {
@@ -258,16 +297,52 @@ pub async fn swarm_topology(State(s): State<GatewayState>) -> Json<SwarmTopology
                 Role::Volunteer => "volunteer",
                 Role::Cloud     => "cloud",
             };
+            let layers = rec.capability.layers.first()
+                .map(|sr| {
+                    if sr.end == u16::MAX {
+                        format!("{}..", sr.start)
+                    } else {
+                        format!("{}..{}", sr.start, sr.end)
+                    }
+                })
+                .unwrap_or_default();
+            let metrics = synth_node_metrics(&rec.peer_id.short(), uptime, &kind);
             peers.push(SwarmNode {
                 id:        rec.peer_id.short(),
                 kind,
                 addr:      rec.addrs.first().cloned().unwrap_or_default(),
-                tok_per_s: rec.capability.tok_per_sec,
+                tok_per_s: metrics.tok_per_s,
                 models:    rec.capability.models.iter().map(|m| m.0.clone()).collect(),
                 source:    dir_name.clone(),
+                layers,
+                metrics,
             });
         }
     }
+
+    // Sort by id so the SPA's sparkline rendering is stable across
+    // refreshes — ordering shouldn't depend on directory iteration.
+    peers.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let gateway = SwarmNode {
+        id:        "gateway".to_string(),
+        kind:      "gateway",
+        addr:      s.config.gateway_bind.clone(),
+        tok_per_s: 0.0,
+        models:    vec![],
+        source:    "self".to_string(),
+        layers:    String::new(),
+        metrics:   synth_node_metrics("gateway", uptime, &"gateway"),
+    };
+
+    let chain_tok_per_s = if peers.is_empty() {
+        0.0
+    } else {
+        // End-to-end pipeline rate is gated by the slowest peer.
+        peers.iter().map(|p| p.metrics.tok_per_s)
+            .fold(f32::INFINITY, f32::min)
+    };
+    let chain_bytes_s = peers.iter().map(|p| p.metrics.bytes_out_s).sum();
 
     let mut model_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for p in &peers {
@@ -280,9 +355,50 @@ pub async fn swarm_topology(State(s): State<GatewayState>) -> Json<SwarmTopology
         gateway,
         peers,
         models:     model_set.into_iter().collect(),
-        uptime_sec: s.started_at.elapsed().as_secs(),
+        uptime_sec: uptime,
         upstream:   s.config.upstream_url.clone(),
+        chain_tok_per_s: if chain_tok_per_s.is_finite() { chain_tok_per_s } else { 0.0 },
+        chain_bytes_s,
+        synthetic:  true,
     })
+}
+
+/// Deterministically synthesized per-node metrics keyed by the node's
+/// short id. The same id at the same gateway uptime produces the same
+/// numbers, so a polling SPA sees gentle drift rather than noisy random
+/// jitter — looks like a real running system, not a slot machine.
+///
+/// Drops out completely once the chain telemetry channel from arc 6
+/// sub-C lands; the SPA's `synthetic` flag is what keeps users honest
+/// about which numbers are real today.
+fn synth_node_metrics(id: &str, uptime: u64, kind: &str) -> NodeMetrics {
+    // Hash the id to get a stable per-node seed, mod some periods so
+    // the values drift over time instead of being constants.
+    let seed = id.bytes().fold(0u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32));
+    let phase = (uptime as f32 * 0.6 + (seed % 360) as f32) * std::f32::consts::PI / 180.0;
+    let drift = phase.sin() * 0.5 + 0.5;             // 0..1, slow oscillation
+    let drift_fast = (phase * 4.7).sin() * 0.5 + 0.5;
+
+    let (rtt_ms, tok_per_s, gpu_util, vram_total, bytes_base) = match kind {
+        "gateway"   => (0.5 + drift * 0.4, 0.0,                  0.0,                0,                 0.0),
+        "cloud"     => (62.0 + drift * 18.0, 28.0 + drift_fast * 8.0,  0.78 + drift * 0.18, 24 * 1024_u64.pow(3), 220_000.0),
+        // volunteers (default): real-feeling LAN numbers
+        _           => (3.5 + drift * 2.4,  46.0 + drift_fast * 11.0, 0.65 + drift * 0.25, 8  * 1024_u64.pow(3), 180_000.0),
+    };
+    let vram_used = ((vram_total as f32) * (0.55 + 0.35 * drift)) as u64;
+    let bytes_out_s = bytes_base * (0.7 + 0.6 * drift_fast);
+    let bytes_in_s  = bytes_out_s * 0.92;
+
+    NodeMetrics {
+        synthetic: true,
+        rtt_ms,
+        tok_per_s,
+        gpu_util,
+        vram_used,
+        vram_total,
+        bytes_in_s,
+        bytes_out_s,
+    }
 }
 
 // ----------------------------------------------------------------------

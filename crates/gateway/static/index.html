@@ -16,7 +16,7 @@
     --subtle:    #8a8e96;
     --inactive:  #5a5e66;
 
-    --intel:        #d97757;   /* primary brand */
+    --intel:        #d97757;
     --intel-lit:    #ffb089;
     --you:          #7ab4e8;
     --sys:          #808080;
@@ -56,6 +56,7 @@
     align-items: center;
     gap: 16px;
     font-size: 13px;
+    flex-wrap: wrap;
   }
   header .brand {
     color: var(--intel);
@@ -74,6 +75,15 @@
     border-radius: 3px;
     font-size: 11px;
     margin-left: auto;
+  }
+  header .synth-flag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--warning);
+    border: 1px solid var(--warning);
+    padding: 1px 6px;
+    border-radius: 3px;
+    opacity: 0.85;
   }
 
   /* ---------- main two-pane ---------- */
@@ -111,6 +121,11 @@
     background: var(--inactive);
   }
   .panel-head .dot.live { background: var(--intel-lit); box-shadow: 0 0 8px var(--intel); }
+  .panel-head .right {
+    margin-left: auto;
+    color: var(--inactive);
+    font-size: 11px;
+  }
 
   /* ---------- chat panel ---------- */
   .transcript {
@@ -136,17 +151,6 @@
     line-height: 1.55;
     white-space: pre-wrap;
     word-wrap: break-word;
-  }
-  .turn pre {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-left: 2px solid var(--inactive);
-    padding: 10px 12px;
-    border-radius: 4px;
-    font-family: var(--mono);
-    font-size: 12.5px;
-    overflow-x: auto;
-    margin: 6px 0;
   }
   .turn .cursor {
     display: inline-block;
@@ -208,22 +212,67 @@
     letter-spacing: 0.6px;
     font-family: var(--mono);
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .topo-section h3 .scale {
+    margin-left: auto;
+    color: var(--inactive);
+    text-transform: none;
+    font-weight: 400;
+    letter-spacing: 0;
   }
 
   .stage {
     background: var(--panel-hi);
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 18px 14px;
-    min-height: 220px;
+    padding: 10px;
+    min-height: 240px;
     position: relative;
   }
-  .stage svg { width: 100%; height: 220px; }
+  .stage svg { width: 100%; height: 240px; }
 
+  /* aggregate stat strip above the topology graph */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .stat {
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+  }
+  .stat .label {
+    color: var(--subtle);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: var(--mono);
+  }
+  .stat .value {
+    color: var(--text);
+    font-size: 18px;
+    font-family: var(--mono);
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .stat .unit {
+    color: var(--subtle);
+    font-size: 11px;
+    margin-left: 2px;
+    font-weight: 400;
+  }
+
+  /* per-node card */
   .node-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 8px;
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
   .node {
     background: var(--panel-hi);
@@ -232,6 +281,10 @@
     border-radius: 4px;
     padding: 8px 10px;
     font-size: 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 8px;
   }
   .node.gateway   { border-left-color: var(--gateway); }
   .node.volunteer { border-left-color: var(--volunteer); }
@@ -247,12 +300,39 @@
     font-family: var(--mono);
     margin-top: 2px;
   }
-  .node .models {
-    color: var(--subtle);
-    font-size: 10.5px;
+  .node .right {
+    text-align: right;
+    color: var(--text);
     font-family: var(--mono);
-    margin-top: 4px;
-    line-height: 1.4;
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+  .node .right .num { color: var(--text); font-weight: 600; }
+  .node .right .lbl { color: var(--inactive); }
+
+  .bar {
+    display: inline-block;
+    width: 56px;
+    height: 4px;
+    background: var(--bg);
+    border-radius: 2px;
+    overflow: hidden;
+    vertical-align: middle;
+  }
+  .bar > span {
+    display: block;
+    height: 100%;
+    background: var(--intel);
+    transition: width 0.4s ease;
+  }
+
+  /* sparkline + traffic chart */
+  .spark {
+    width: 100%;
+    height: 60px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel-hi);
   }
 
   .empty {
@@ -290,6 +370,10 @@
   <span class="pipe">·</span>
   <span class="label">uptime</span>
   <span class="value" id="hdr-uptime">0s</span>
+  <span class="pipe">·</span>
+  <span class="label">chain</span>
+  <span class="value" id="hdr-chain">— tok/s</span>
+  <span id="hdr-synth" class="synth-flag" style="display:none">synthetic</span>
   <span class="badge" id="hdr-status">live</span>
 </header>
 
@@ -299,6 +383,7 @@
     <div class="panel-head">
       <span class="dot" id="chat-dot"></span>
       chat · /v1/chat/completions
+      <span class="right" id="chat-meta"></span>
     </div>
     <div class="transcript" id="transcript">
       <div class="turn sys">
@@ -317,13 +402,29 @@
     <div class="panel-head">
       <span class="dot" id="swarm-dot"></span>
       swarm · /v1/swarm/topology
+      <span class="right" id="topo-meta"></span>
     </div>
     <div class="topo">
+      <div class="stats">
+        <div class="stat"><div class="label">e2e tok/s</div><div class="value" id="stat-tps">—<span class="unit"> tok/s</span></div></div>
+        <div class="stat"><div class="label">chain bytes</div><div class="value" id="stat-bytes">—<span class="unit"> /s</span></div></div>
+        <div class="stat"><div class="label">avg rtt</div><div class="value" id="stat-rtt">—<span class="unit"> ms</span></div></div>
+      </div>
+
       <div class="topo-section">
-        <h3>chain</h3>
+        <h3>chain
+          <span class="scale" id="chain-scale"></span>
+        </h3>
         <div class="stage">
-          <svg id="stage" viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet"></svg>
+          <svg id="stage" viewBox="0 0 600 240" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
+      </div>
+
+      <div class="topo-section">
+        <h3>traffic
+          <span class="scale">last 60 s · bytes/s</span>
+        </h3>
+        <svg class="spark" id="traffic" viewBox="0 0 600 60" preserveAspectRatio="none"></svg>
       </div>
 
       <div class="topo-section">
@@ -350,10 +451,12 @@
 //  state
 // ----------------------------------------------------------------------
 const state = {
-  topology: null,
-  history:  [],            // [{role, content}]
-  streaming: false,
+  topology:   null,
+  history:    [],
+  streaming:  false,
   lastTopoAt: 0,
+  /// rolling 60-sample series for the traffic sparkline
+  traffic:    new Array(60).fill(0),
 };
 
 // ----------------------------------------------------------------------
@@ -365,6 +468,8 @@ async function pollTopology() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     state.topology = await r.json();
     state.lastTopoAt = Date.now();
+    state.traffic.push(state.topology.chain_bytes_s || 0);
+    state.traffic.shift();
     renderTopology();
     document.getElementById('topo-error').textContent = '';
     document.getElementById('topo-status').className = 'ok';
@@ -381,30 +486,49 @@ function refreshTopologyAge() {
 }
 
 // ----------------------------------------------------------------------
-//  render — header + nodes + chain stage
+//  render — header + nodes + chain stage + traffic chart
 // ----------------------------------------------------------------------
 function renderTopology() {
   const t = state.topology;
   if (!t) return;
 
-  // header summary
   document.getElementById('hdr-peers').textContent = String(t.peers.length);
   document.getElementById('hdr-uptime').textContent = formatUptime(t.uptime_sec);
+  document.getElementById('hdr-chain').textContent = (t.chain_tok_per_s || 0).toFixed(1) + ' tok/s';
+  const synthEl = document.getElementById('hdr-synth');
+  synthEl.style.display = t.synthetic ? '' : 'none';
+
   const firstModel = t.models[0] || (t.peers[0] && t.peers[0].models[0]) || '—';
   document.getElementById('hdr-model').textContent = firstModel;
+  document.getElementById('topo-meta').textContent =
+    t.peers.length + ' peer' + (t.peers.length === 1 ? '' : 's');
 
-  // peers list
+  // aggregate stats strip
+  document.getElementById('stat-tps').innerHTML =
+    fmtNum(t.chain_tok_per_s) + '<span class="unit"> tok/s</span>';
+  document.getElementById('stat-bytes').innerHTML =
+    fmtBytes(t.chain_bytes_s) + '<span class="unit">/s</span>';
+  const avgRtt = t.peers.length
+    ? t.peers.reduce((a, p) => a + (p.metrics?.rtt_ms || 0), 0) / t.peers.length
+    : 0;
+  document.getElementById('stat-rtt').innerHTML =
+    avgRtt.toFixed(1) + '<span class="unit"> ms</span>';
+
+  document.getElementById('chain-scale').textContent =
+    t.chain_tok_per_s ? `${t.chain_tok_per_s.toFixed(1)} tok/s e2e` : '';
+
+  // peer cards
   const peersEl = document.getElementById('peers');
   peersEl.innerHTML = '';
   if (t.peers.length === 0) {
-    peersEl.innerHTML = '<div class="empty">no peers discovered yet — start a peer with <code>intelnav node</code></div>';
+    peersEl.innerHTML = '<div class="empty">no peers discovered yet — start a peer with <code>scripts/demo.sh</code></div>';
   } else {
     for (const p of t.peers) {
-      peersEl.appendChild(renderNode(p));
+      peersEl.appendChild(renderPeerCard(p));
     }
   }
 
-  // models list
+  // models
   const modelsEl = document.getElementById('models');
   modelsEl.innerHTML = '';
   if (t.models.length === 0) {
@@ -413,27 +537,41 @@ function renderTopology() {
     for (const m of t.models) {
       const el = document.createElement('div');
       el.className = 'node';
-      el.innerHTML = `<div class="id">${escapeHtml(m)}</div>
-                      <div class="meta">${countProvidersFor(m, t.peers)} provider(s)</div>`;
+      el.innerHTML = `
+        <div>
+          <div class="id">${escapeHtml(m)}</div>
+          <div class="meta">${countProvidersFor(m, t.peers)} provider(s)</div>
+        </div>`;
       modelsEl.appendChild(el);
     }
   }
 
-  // chain stage
   drawChain(t);
+  drawTraffic();
 }
 
-function renderNode(n) {
+function renderPeerCard(p) {
   const el = document.createElement('div');
-  el.className = 'node ' + (n.kind || 'volunteer');
-  const tps = n.tok_per_s ? n.tok_per_s.toFixed(1) + ' tok/s' : '—';
-  const models = n.models.length ? n.models.slice(0, 2).map(escapeHtml).join(', ')
-                                 : '<span style="color:var(--inactive)">no models advertised</span>';
-  const tail = n.models.length > 2 ? ' (+' + (n.models.length - 2) + ' more)' : '';
+  el.className = 'node ' + (p.kind || 'volunteer');
+  const m = p.metrics || {};
+  const layers = p.layers ? `· layers ${p.layers} ` : '';
+  const gpuPct = Math.round((m.gpu_util || 0) * 100);
+  const vram = m.vram_total
+    ? `${fmtBytes(m.vram_used)} / ${fmtBytes(m.vram_total)}`
+    : 'cpu';
+
   el.innerHTML = `
-    <div class="id">${escapeHtml(n.id)}</div>
-    <div class="meta">${escapeHtml(n.kind)} · ${escapeHtml(n.addr || '?')} · ${tps} · ${escapeHtml(n.source)}</div>
-    <div class="models">${models}${tail}</div>
+    <div>
+      <div class="id">${escapeHtml(p.id)}</div>
+      <div class="meta">${escapeHtml(p.kind)} · ${escapeHtml(p.addr || '?')} ${layers}· ${escapeHtml(p.source)}</div>
+      <div class="meta">vram <span class="num">${vram}</span> ·
+        gpu <span class="bar"><span style="width:${gpuPct}%"></span></span> ${gpuPct}%</div>
+    </div>
+    <div class="right">
+      <div><span class="num">${(m.tok_per_s || 0).toFixed(1)}</span><span class="lbl"> tok/s</span></div>
+      <div><span class="num">${(m.rtt_ms || 0).toFixed(1)}</span><span class="lbl"> ms</span></div>
+      <div><span class="num">${fmtBytes(m.bytes_out_s || 0)}</span><span class="lbl">/s</span></div>
+    </div>
   `;
   return el;
 }
@@ -443,72 +581,92 @@ function countProvidersFor(model, peers) {
 }
 
 // ----------------------------------------------------------------------
-//  chain stage — gateway in the middle, peers around it
+//  chain stage — gateway → peer-1 → peer-2 → peer-3 → gateway
 // ----------------------------------------------------------------------
 function drawChain(t) {
   const svg = document.getElementById('stage');
   svg.innerHTML = '';
 
-  const W = 600, H = 220;
-  const gx = W / 2, gy = H / 2;
-
-  // gateway hub
-  drawNode(svg, gx, gy, 'gateway', t.gateway.id, 'var(--gateway)', state.streaming);
-
-  if (t.peers.length === 0) {
-    drawText(svg, gx, gy + 56, 'awaiting peers…', 'var(--inactive)');
+  const W = 600, H = 240;
+  const peers = t.peers.slice(0, 6);
+  if (peers.length === 0) {
+    drawText(svg, W / 2, H / 2, 'awaiting peers…', 'var(--inactive)');
     return;
   }
 
-  // peers in a circle
-  const R = Math.min(80, 30 + t.peers.length * 6);
-  const radius = Math.max(70, Math.min(95, R));
-  const peers = t.peers.slice(0, 8);                       // cap visual clutter
-  for (let i = 0; i < peers.length; i++) {
-    const angle = (i / peers.length) * Math.PI * 2 - Math.PI / 2;
-    const px = gx + radius * Math.cos(angle);
-    const py = gy + radius * Math.sin(angle);
+  // Linear layout: gateway on the left, peers in a row, gateway hub
+  // returning at the right end (head step).
+  const stops = ['gw'].concat(peers.map((_, i) => 'p' + i)).concat(['head']);
+  const N = stops.length;
+  const margin = 40;
+  const dx = (W - 2 * margin) / (N - 1);
+  const y = H / 2;
 
-    // edge first (so node draws over it)
-    drawEdge(svg, gx, gy, px, py, state.streaming);
-    const color = peers[i].kind === 'cloud' ? 'var(--cloud)' : 'var(--volunteer)';
-    drawNode(svg, px, py, peers[i].kind, peers[i].id, color, false);
+  // edges first (drawn under nodes)
+  for (let i = 0; i < N - 1; i++) {
+    const x1 = margin + i * dx;
+    const x2 = margin + (i + 1) * dx;
+    drawEdge(svg, x1, y, x2, y, state.streaming, i, N - 1);
   }
-  if (t.peers.length > 8) {
-    drawText(svg, gx, H - 8, '+' + (t.peers.length - 8) + ' more', 'var(--inactive)');
+
+  // nodes
+  drawNode(svg, margin, y, 'gateway', 'embed', 'var(--gateway)', state.streaming, 'gateway');
+  for (let i = 0; i < peers.length; i++) {
+    const p = peers[i];
+    const x = margin + (i + 1) * dx;
+    const color = p.kind === 'cloud' ? 'var(--cloud)' : 'var(--volunteer)';
+    const subtitle = p.layers ? p.layers : '';
+    drawNode(svg, x, y, p.kind, p.id, color, state.streaming, subtitle);
+  }
+  drawNode(svg, margin + (N - 1) * dx, y, 'gateway', 'head', 'var(--gateway)', state.streaming, 'sample');
+
+  if (t.peers.length > peers.length) {
+    drawText(svg, W / 2, H - 12, '+' + (t.peers.length - peers.length) + ' more peers', 'var(--inactive)');
   }
 }
 
-function drawNode(svg, x, y, kind, label, color, pulse) {
+function drawNode(svg, x, y, kind, label, color, pulse, subtitle) {
   const ns = 'http://www.w3.org/2000/svg';
   const g  = document.createElementNS(ns, 'g');
+  const r  = kind === 'gateway' ? 14 : 18;
   const c  = document.createElementNS(ns, 'circle');
   c.setAttribute('cx', x); c.setAttribute('cy', y);
-  c.setAttribute('r', kind === 'gateway' ? 18 : 12);
+  c.setAttribute('r', r);
   c.setAttribute('fill', '#15171b');
   c.setAttribute('stroke', color);
   c.setAttribute('stroke-width', '2');
   if (pulse) {
     const a = document.createElementNS(ns, 'animate');
     a.setAttribute('attributeName', 'r');
-    a.setAttribute('values', `${kind === 'gateway' ? 18 : 12};${kind === 'gateway' ? 22 : 16};${kind === 'gateway' ? 18 : 12}`);
+    a.setAttribute('values', `${r};${r + 4};${r}`);
     a.setAttribute('dur', '1.2s'); a.setAttribute('repeatCount', 'indefinite');
     c.appendChild(a);
   }
   g.appendChild(c);
 
-  const t = document.createElementNS(ns, 'text');
-  t.setAttribute('x', x); t.setAttribute('y', y + (kind === 'gateway' ? 36 : 28));
-  t.setAttribute('text-anchor', 'middle');
-  t.setAttribute('fill', '#8a8e96');
-  t.setAttribute('font-family', 'ui-monospace, monospace');
-  t.setAttribute('font-size', '10');
-  t.textContent = label.length > 12 ? label.slice(0, 11) + '…' : label;
-  g.appendChild(t);
+  const t1 = document.createElementNS(ns, 'text');
+  t1.setAttribute('x', x); t1.setAttribute('y', y + r + 16);
+  t1.setAttribute('text-anchor', 'middle');
+  t1.setAttribute('fill', '#e6e6e6');
+  t1.setAttribute('font-family', 'ui-monospace, monospace');
+  t1.setAttribute('font-size', '11');
+  t1.textContent = label.length > 14 ? label.slice(0, 13) + '…' : label;
+  g.appendChild(t1);
+
+  if (subtitle) {
+    const t2 = document.createElementNS(ns, 'text');
+    t2.setAttribute('x', x); t2.setAttribute('y', y + r + 30);
+    t2.setAttribute('text-anchor', 'middle');
+    t2.setAttribute('fill', '#5a5e66');
+    t2.setAttribute('font-family', 'ui-monospace, monospace');
+    t2.setAttribute('font-size', '10');
+    t2.textContent = subtitle;
+    g.appendChild(t2);
+  }
   svg.appendChild(g);
 }
 
-function drawEdge(svg, x1, y1, x2, y2, animated) {
+function drawEdge(svg, x1, y1, x2, y2, animated, idx, total) {
   const ns = 'http://www.w3.org/2000/svg';
   const ln = document.createElementNS(ns, 'line');
   ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
@@ -516,11 +674,12 @@ function drawEdge(svg, x1, y1, x2, y2, animated) {
   ln.setAttribute('stroke', animated ? 'var(--intel)' : 'var(--border-hi)');
   ln.setAttribute('stroke-width', '1.5');
   if (animated) {
-    ln.setAttribute('stroke-dasharray', '4,4');
+    ln.setAttribute('stroke-dasharray', '6,4');
     const a = document.createElementNS(ns, 'animate');
     a.setAttribute('attributeName', 'stroke-dashoffset');
-    a.setAttribute('values', '0;-16');
-    a.setAttribute('dur', '0.6s'); a.setAttribute('repeatCount', 'indefinite');
+    a.setAttribute('values', '0;-20');
+    a.setAttribute('dur', '0.7s'); a.setAttribute('repeatCount', 'indefinite');
+    a.setAttribute('begin', `${(idx / Math.max(total, 1)) * 0.1}s`);
     ln.appendChild(a);
   }
   svg.appendChild(ln);
@@ -539,6 +698,44 @@ function drawText(svg, x, y, text, color) {
 }
 
 // ----------------------------------------------------------------------
+//  traffic sparkline — 60 samples × 1 sample/poll (~3s)
+// ----------------------------------------------------------------------
+function drawTraffic() {
+  const svg = document.getElementById('traffic');
+  svg.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg';
+
+  const W = 600, H = 60;
+  const max = Math.max(1, ...state.traffic);
+  const dx = W / (state.traffic.length - 1);
+
+  // filled area
+  let d = `M 0 ${H} `;
+  for (let i = 0; i < state.traffic.length; i++) {
+    const x = i * dx;
+    const y = H - (state.traffic[i] / max) * (H - 4) - 2;
+    d += `L ${x.toFixed(1)} ${y.toFixed(1)} `;
+  }
+  d += `L ${W} ${H} Z`;
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', 'rgba(217, 119, 87, 0.18)');
+  path.setAttribute('stroke', 'var(--intel)');
+  path.setAttribute('stroke-width', '1.2');
+  svg.appendChild(path);
+
+  // axis label — current value
+  const t = document.createElementNS(ns, 'text');
+  t.setAttribute('x', W - 6); t.setAttribute('y', 14);
+  t.setAttribute('text-anchor', 'end');
+  t.setAttribute('fill', '#8a8e96');
+  t.setAttribute('font-family', 'ui-monospace, monospace');
+  t.setAttribute('font-size', '10.5');
+  t.textContent = fmtBytes(state.traffic[state.traffic.length - 1] || 0) + '/s';
+  svg.appendChild(t);
+}
+
+// ----------------------------------------------------------------------
 //  chat
 // ----------------------------------------------------------------------
 const composer  = document.getElementById('composer');
@@ -546,7 +743,6 @@ const promptEl  = document.getElementById('prompt');
 const sendBtn   = document.getElementById('send');
 const transEl   = document.getElementById('transcript');
 const chatDot   = document.getElementById('chat-dot');
-const swarmDot  = document.getElementById('swarm-dot');
 
 composer.addEventListener('submit', e => { e.preventDefault(); send(); });
 promptEl.addEventListener('keydown', e => {
@@ -560,21 +756,26 @@ async function send() {
   pushTurn('you', text);
   state.history.push({ role: 'user', content: text });
 
-  const open = pushTurn('intel', '', true);   // streaming-open turn
+  const open = pushTurn('intel', '', true);
   state.streaming = true;
   chatDot.classList.add('live');
   sendBtn.disabled = true;
+  drawChain(state.topology || { peers: [] });   // edges animate immediately
 
+  const t0 = performance.now();
   try {
     await streamCompletion(open);
   } catch (e) {
     open.body.textContent = '⚠ ' + e.message;
     open.body.style.color = 'var(--error)';
   } finally {
+    const ms = (performance.now() - t0).toFixed(0);
+    document.getElementById('chat-meta').textContent = `last turn: ${ms} ms`;
     state.streaming = false;
     chatDot.classList.remove('live');
     sendBtn.disabled = false;
     state.history.push({ role: 'assistant', content: open.body.textContent });
+    drawChain(state.topology || { peers: [] });
   }
 }
 
@@ -603,8 +804,6 @@ async function streamCompletion(open) {
     const { done, value } = await reader.read();
     if (done) break;
     buf += decoder.decode(value, { stream: true });
-
-    // SSE frames are separated by a blank line.
     let idx;
     while ((idx = buf.indexOf('\n\n')) !== -1) {
       const frame = buf.slice(0, idx);
@@ -616,7 +815,6 @@ async function streamCompletion(open) {
 }
 
 function handleSseFrame(frame, open) {
-  // OpenAI-shape SSE: lines like `data: {…}` or `data: [DONE]`.
   for (const line of frame.split('\n')) {
     if (!line.startsWith('data:')) continue;
     const payload = line.slice(5).trim();
@@ -662,6 +860,18 @@ function pushTurn(role, text, streaming = false) {
 // ----------------------------------------------------------------------
 //  helpers
 // ----------------------------------------------------------------------
+function fmtNum(n) {
+  if (!isFinite(n)) return '—';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return n.toFixed(1);
+}
+function fmtBytes(n) {
+  if (!isFinite(n)) return '—';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(n < 10 ? 1 : 0) + ' ' + u[i];
+}
 function formatUptime(s) {
   if (s < 60) return s + 's';
   if (s < 3600) return Math.round(s / 60) + 'm';
@@ -678,7 +888,7 @@ function escapeHtml(s) {
 //  boot
 // ----------------------------------------------------------------------
 pollTopology();
-setInterval(pollTopology, 3000);
+setInterval(pollTopology, 1500);
 setInterval(refreshTopologyAge, 1000);
 </script>
 </body>
