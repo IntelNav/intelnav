@@ -25,6 +25,7 @@ pub mod p2p;
 #[cfg(feature = "serve")]
 pub mod serve;
 pub mod stitch;
+pub mod metadata;
 
 pub use bundle::{classify_tensor, BundleEntry, BundleKind, BundleMember};
 pub use chunker::{chunk_gguf, verify_chunks, ChunkOutcome, ChunkerOptions};
@@ -34,4 +35,5 @@ pub use http::{
     FetchOptions, FetchOutcome, FetchPlan, FetchedManifest,
 };
 pub use manifest::Manifest;
+pub use metadata::{read_model_metadata, ModelMetadata};
 pub use stitch::{stitch_subset, StitchOutcome, StitchRange};

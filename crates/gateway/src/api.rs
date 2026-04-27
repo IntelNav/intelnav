@@ -284,6 +284,11 @@ pub struct SwarmTopology {
     /// True when the topology is reporting at least one synthetic
     /// metric. Drops to false once chain telemetry replaces synth.
     pub synthetic:       bool,
+    /// GGUF metadata for the model the gateway driver currently has
+    /// loaded — `None` in upstream-proxy mode. The SPA reads this to
+    /// render the MoE pill on the chain stage and to know how many
+    /// expert slots to draw.
+    pub active_model:    Option<intelnav_model_store::ModelMetadata>,
 }
 
 pub async fn swarm_topology(State(s): State<GatewayState>) -> Json<SwarmTopology> {
@@ -359,6 +364,8 @@ pub async fn swarm_topology(State(s): State<GatewayState>) -> Json<SwarmTopology
     }
 
     let any_synth = peers.iter().any(|p| p.metrics.synthetic);
+    let active_model = std::env::var("INTELNAV_GATEWAY_MODEL").ok()
+        .and_then(|p| intelnav_model_store::read_model_metadata(&p).ok());
     Json(SwarmTopology {
         gateway,
         peers,
@@ -368,6 +375,7 @@ pub async fn swarm_topology(State(s): State<GatewayState>) -> Json<SwarmTopology
         chain_tok_per_s: if chain_tok_per_s.is_finite() { chain_tok_per_s } else { 0.0 },
         chain_bytes_s,
         synthetic:  any_synth,
+        active_model,
     })
 }
 
@@ -626,6 +634,12 @@ pub struct LocalModelEntry {
     /// loaded. Exactly one model is active at a time when chain
     /// mode is enabled; none when the gateway is in proxy mode.
     pub active:      bool,
+    /// Cheap GGUF-header read: arch, blocks, MoE expert counts.
+    /// `None` when the file couldn't be parsed (corrupt or wrong
+    /// version). Populated lazily on each scan; the parse is mmap +
+    /// O(n_kv) so even Mixtral's 26 GiB file resolves in
+    /// milliseconds.
+    pub metadata:    Option<intelnav_model_store::ModelMetadata>,
 }
 
 #[derive(Serialize)]
@@ -673,11 +687,16 @@ pub async fn models_available(State(s): State<GatewayState>) -> Json<ModelsAvail
                 Some(a) => std::path::Path::new(a).canonicalize().ok().map_or(false, |c| c == canon),
                 None    => false,
             };
+            // Best-effort metadata read. A bad GGUF here just
+            // surfaces as `metadata: None` in the listing — the SPA
+            // dims the row but the picker still works.
+            let metadata = intelnav_model_store::read_model_metadata(&path).ok();
             models.push(LocalModelEntry {
                 name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
                 path: path_str,
                 size_bytes: size,
                 active: is_active,
+                metadata,
             });
         }
     }

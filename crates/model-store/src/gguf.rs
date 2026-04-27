@@ -58,7 +58,7 @@ pub enum GgufError {
     UnknownGgmlType { got: u32 },
 }
 
-type Result<T> = std::result::Result<T, GgufError>;
+pub type Result<T> = std::result::Result<T, GgufError>;
 
 // -------- KV value types --------
 //

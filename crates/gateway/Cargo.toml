@@ -12,6 +12,7 @@ intelnav-crypto  = { workspace = true }
 intelnav-net     = { workspace = true }
 intelnav-wire    = { workspace = true }
 intelnav-runtime = { workspace = true }
+intelnav-model-store = { workspace = true }
 
 tokio         = { workspace = true }
 blake3        = { workspace = true }

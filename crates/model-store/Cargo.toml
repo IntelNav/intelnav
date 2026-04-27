@@ -46,3 +46,7 @@ serve = ["dep:axum", "dep:tower-http", "dep:tokio-util"]
 # transport for a libp2p Kademlia swarm with provider records and a
 # request-response protocol that streams chunks between peers.
 p2p   = ["dep:libp2p", "dep:async-trait"]
+
+[[example]]
+name = "probe_meta"
+path = "examples/probe_meta.rs"

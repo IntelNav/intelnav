@@ -85,6 +85,64 @@
     border-radius: 3px;
     opacity: 0.85;
   }
+  header .moe-pill, .moe-pill {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--cloud);
+    border: 1px solid var(--cloud);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  /* Static expert grid under the chain stage. Rendered for MoE
+     models so the viewer can see "this slice owns 8 experts per
+     MoE layer" at a glance. Phase 2 will animate the cells when
+     experts fire. */
+  .expert-grid {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .expert-grid .head {
+    color: var(--subtle);
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .expert-grid .row {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .expert-grid .row .lbl {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--subtle);
+    text-align: right;
+  }
+  .expert-grid .cells {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(10px, 1fr);
+    gap: 2px;
+  }
+  .expert-grid .cell {
+    height: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    transition: background 0.18s, border-color 0.18s;
+  }
+  .expert-grid .cell.held {
+    background: rgba(200, 141, 232, 0.18);
+    border-color: var(--cloud);
+  }
 
   /* ---------- main two-pane ---------- */
   main {
@@ -558,6 +616,7 @@
   <span class="pipe">·</span>
   <span class="label">chain</span>
   <span class="value" id="hdr-chain">— tok/s</span>
+  <span id="hdr-moe" class="moe-pill" style="display:none">MoE</span>
   <span id="hdr-synth" class="synth-flag" style="display:none">synthetic</span>
   <span class="badge" id="hdr-status">live</span>
 </header>
@@ -602,8 +661,9 @@
           <span class="scale" id="chain-scale"></span>
         </h3>
         <div class="stage">
-          <svg id="stage" viewBox="0 0 600 240" preserveAspectRatio="xMidYMid meet"></svg>
+          <svg id="stage" viewBox="0 0 600 260" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
+        <div id="expert-grid" class="expert-grid" style="display:none"></div>
       </div>
 
       <div class="topo-section">
@@ -711,7 +771,20 @@ function renderTopology() {
   const synthEl = document.getElementById('hdr-synth');
   synthEl.style.display = t.synthetic ? '' : 'none';
 
-  const firstModel = t.models[0] || (t.peers[0] && t.peers[0].models[0]) || '—';
+  // MoE pill in the header — present only when the active model
+  // declares > 1 expert per layer in its GGUF metadata.
+  const moeEl = document.getElementById('hdr-moe');
+  const moe = moeLabelFor(t.active_model);
+  if (moe) {
+    moeEl.textContent = moe;
+    moeEl.style.display = '';
+  } else {
+    moeEl.style.display = 'none';
+  }
+  renderExpertGrid(t);
+
+  const firstModel = (t.active_model && t.active_model.name)
+                  || t.models[0] || (t.peers[0] && t.peers[0].models[0]) || '—';
   document.getElementById('hdr-model').textContent = firstModel;
   document.getElementById('topo-meta').textContent =
     t.peers.length + ' peer' + (t.peers.length === 1 ? '' : 's');
@@ -1191,6 +1264,41 @@ function fmtNum(n) {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
   return n.toFixed(1);
 }
+function moeLabelFor(meta) {
+  if (!meta || !meta.expert_count || meta.expert_count <= 1) return '';
+  const k = meta.expert_used_count || 0;
+  return k ? `MoE ${meta.expert_count}×top-${k}` : `MoE ×${meta.expert_count}`;
+}
+
+/// Static expert grid under the chain stage. One row per peer; one
+/// cell per global expert. Each peer "holds" every expert in its
+/// layer slice when the chain is layer-split (phase 1) — phase 2
+/// will turn cells on/off as experts actually fire.
+function renderExpertGrid(t) {
+  const root = document.getElementById('expert-grid');
+  const meta = t.active_model;
+  if (!meta || !meta.expert_count || meta.expert_count <= 1 || t.peers.length === 0) {
+    root.style.display = 'none';
+    root.innerHTML = '';
+    return;
+  }
+  root.style.display = '';
+  const n = meta.expert_count;
+  const k = meta.expert_used_count || 0;
+  let html = `<div class="head">
+    <span class="moe-pill">MoE ${n}×top-${k}</span>
+    <span>each peer holds every expert in its layer slice — phase 2 will light cells as they fire</span>
+  </div>`;
+  for (const p of t.peers) {
+    const cells = Array.from({ length: n }, () => '<span class="cell held"></span>').join('');
+    html += `<div class="row">
+      <span class="lbl">${escapeHtml(shortLabel(p.id))}</span>
+      <div class="cells">${cells}</div>
+    </div>`;
+  }
+  root.innerHTML = html;
+}
+
 function fmtLayers(s) {
   // "18..24" → "18→23", "18.." → "18→…", arrow reads better than dot-dot
   if (!s) return '';
@@ -1335,7 +1443,10 @@ async function pollModels() {
   for (const m of data.models) {
     const o = document.createElement('option');
     o.value = m.path;
-    o.textContent = m.name + (m.size_bytes ? ` (${fmtBytes(m.size_bytes)})` : '');
+    const moe = moeLabelFor(m.metadata);
+    const arch = m.metadata?.architecture ? ` · ${m.metadata.architecture}` : '';
+    const moeStr = moe ? ` · ${moe}` : '';
+    o.textContent = m.name + (m.size_bytes ? ` (${fmtBytes(m.size_bytes)})` : '') + arch + moeStr;
     if (m.active) o.selected = true;
     sel.appendChild(o);
   }
