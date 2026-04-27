@@ -48,7 +48,10 @@ use intelnav_runtime::{DevicePref, Probe, SamplingCfg};
 
 use crate::banner::tagline;
 use crate::browser::{self, BrowserAction, BrowserState, RowKind};
-use crate::catalog::CatalogEntry;
+use crate::catalog::{self, CatalogEntry};
+use crate::contribute::KeptRanges;
+use intelnav_net::{SwarmIndex, SwarmModel};
+
 use crate::chain_driver::{ChainDriver, ChainTarget, DraftTarget};
 use crate::delta::{ChatMessage, Delta};
 use crate::download::{self, Event as DlEvent};
@@ -121,7 +124,29 @@ pub async fn run(
     )));
     app.greet_mode();
 
+    // Spawn the libp2p host. Hold the SwarmHandle on the stack so
+    // the periodic announce task lives as long as the TUI, then
+    // expose its SwarmIndex through AppState.
+    let swarm_handle = match crate::swarm_node::spawn(config, config.models_dir.clone()).await {
+        Ok(h) => {
+            app.history.push(Turn::system(format!(
+                "swarm: peer {} listening on {}",
+                h.node.peer_id, h.node.listen_addrs.first()
+                    .map(|m| m.to_string()).unwrap_or_else(|| "<no addr>".into()),
+            )));
+            app.swarm_index = Some(h.index.clone());
+            Some(h)
+        }
+        Err(e) => {
+            app.history.push(Turn::system(format!(
+                "swarm: offline ({e}). /models will show only local + hub rows.",
+            )));
+            None
+        }
+    };
+
     let result = run_loop(&mut terminal, &mut app).await;
+    drop(swarm_handle);
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), DisableBracketedPaste, LeaveAlternateScreen)?;
@@ -187,6 +212,15 @@ struct AppState {
     local:       LocalDriver,
     chain:       ChainDriver,
     local_scan:  Vec<LocalModel>,
+    /// Live DHT handle. `None` if libp2p couldn't bind on startup —
+    /// the TUI degrades to local-only in that case.
+    swarm_index: Option<SwarmIndex>,
+    /// Cached SwarmIndex snapshot. Populated each time `/models`
+    /// refreshes against the DHT.
+    swarm_models: Vec<SwarmModel>,
+    /// Channel that delivers refreshed swarm snapshots from the
+    /// background fan-out task.
+    swarm_rx:    Option<mpsc::UnboundedReceiver<Vec<SwarmModel>>>,
 
     history:     Vec<Turn>,
     input:       String,
@@ -229,6 +263,10 @@ struct AppState {
     streaming:   Option<mpsc::UnboundedReceiver<Delta>>,
     download:    Option<mpsc::UnboundedReceiver<DlEvent>>,
     dl_progress: Option<DownloadProgress>,
+    /// Active GGUF-split job (hub→split→host pipeline).
+    splitting:   Option<mpsc::UnboundedReceiver<crate::contribute::SplitEvent>>,
+    /// Active swarm slice-pull (pre-split contribute path).
+    pulling:     Option<mpsc::UnboundedReceiver<crate::swarm_contribute::SwarmPullEvent>>,
     start:       Instant,
 
     /// Set by `/quit` — the main loop reads this each tick and exits
@@ -257,6 +295,9 @@ impl AppState {
         Self {
             models_dir, mode, model, tier, quorum, allow_wan,
             local, chain, local_scan,
+            swarm_index:  None,
+            swarm_models: Vec::new(),
+            swarm_rx:     None,
             history: Vec::new(),
             input:   String::new(),
             cursor:  0,
@@ -274,6 +315,8 @@ impl AppState {
             streaming: None,
             download:    None,
             dl_progress: None,
+            splitting:   None,
+            pulling:     None,
             start:       Instant::now(),
             should_quit: false,
             exit_pending: None,
@@ -705,8 +748,33 @@ impl AppState {
     fn open_browser(&mut self) {
         self.local_scan = local::list_models(&self.models_dir);
         let probe = Probe::collect();
-        let rows = browser::build_rows(&self.local_scan, None, &probe);
+        let rows = browser::build_rows(&self.local_scan, &self.swarm_models, &probe);
         self.view = View::Browser(BrowserState::new(rows));
+        self.kick_swarm_refresh();
+    }
+
+    /// Fire a fan-out DHT query for every catalog cid + every cid we
+    /// already host locally. Results land on `self.swarm_rx` and the
+    /// next tick rebuilds the browser rows. Drops if we don't have a
+    /// live SwarmIndex (libp2p failed to bind).
+    fn kick_swarm_refresh(&mut self) {
+        let Some(index) = self.swarm_index.clone() else { return };
+        let mut requests: Vec<(String, Vec<(u16, u16)>)> = catalog::catalog().iter()
+            .map(|e| (e.model_cid(), e.swarm_ranges()))
+            .collect();
+        // Also probe any cid we host locally — it may have peers we
+        // didn't catalog (custom HF models split by another user).
+        for k in scan_local_kept(&self.models_dir) {
+            if !requests.iter().any(|(c, _)| c == &k.model_cid) {
+                requests.push((k.model_cid, k.kept));
+            }
+        }
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.swarm_rx = Some(rx);
+        tokio::spawn(async move {
+            let models = index.refresh_many(&requests).await;
+            let _ = tx.send(models);
+        });
     }
 
     fn close_browser(&mut self) {
@@ -728,13 +796,130 @@ impl AppState {
                 self.model = stem.clone();
                 self.history.push(Turn::system(format!("→ local · {stem}")));
             }
-            RowKind::Network { .. } => {
-                self.mode  = RunMode::Network;
-                self.model = row.model.clone();
-                self.history.push(Turn::system(format!("→ network · {}", row.model)));
+            RowKind::Swarm { cid, unique_peers, .. } => {
+                let Some(sm) = self.swarm_models.iter().find(|m| m.cid == cid) else {
+                    self.history.push(Turn::system(
+                        "swarm cache lost this model — reopen /models and retry.",
+                    ));
+                    self.close_browser();
+                    return;
+                };
+                let ranges: Vec<(u16, u16, Vec<intelnav_net::ProviderRecord>)> =
+                    sm.ranges.iter()
+                        .map(|r| (r.start, r.end, r.providers.clone()))
+                        .collect();
+                match ChainTarget::from_swarm(&ranges) {
+                    Ok(target) => {
+                        self.history.push(Turn::system(format!(
+                            "→ swarm · {} ({} peers, cid={}) · chain {}",
+                            row.model, unique_peers,
+                            &cid[..cid.len().min(12)],
+                            target.summary(),
+                        )));
+                        self.chain.set_target(Some(target));
+                        self.mode  = RunMode::Network;
+                        self.model = row.model.clone();
+                    }
+                    Err(e) => {
+                        self.history.push(Turn::system(format!(
+                            "couldn't assemble chain for {}: {e}", row.model,
+                        )));
+                    }
+                }
             }
             RowKind::Install { entry, .. } => {
                 self.start_install(entry);
+            }
+        }
+        self.close_browser();
+    }
+
+    /// `c` on a row in the model picker. Hub rows trigger
+    /// download+split+host (#21); swarm rows trigger pre-split
+    /// pull+announce (#22). Both paths share the chunk-server
+    /// + DHT announce backend; today we surface the user-visible
+    /// "I want to contribute X" intent and stop short of running
+    /// the actual job — those are the next two tasks.
+    fn contribute_browser(&mut self) {
+        let Some(row) = (match &self.view {
+            View::Browser(s) => s.current().cloned(),
+            _                => None,
+        }) else { return; };
+        if !row.contribute_ok { return; }
+
+        match row.kind {
+            RowKind::Local { .. } => {
+                self.history.push(Turn::system(
+                    "this model is already cached — nothing to contribute.",
+                ));
+            }
+            RowKind::Swarm { cid, .. } => {
+                let Some(sm) = self.swarm_models.iter().find(|m| m.cid == cid) else {
+                    self.history.push(Turn::system(
+                        "swarm cache lost this model — reopen /models and retry.",
+                    ));
+                    self.close_browser();
+                    return;
+                };
+                let candidates: Vec<(u16, u16, Vec<intelnav_net::ProviderRecord>)> = sm.ranges.iter()
+                    .map(|r| (r.start, r.end, r.providers.clone()))
+                    .collect();
+                let Some((start, end, provider)) =
+                    crate::swarm_contribute::default_range(&cid, &candidates)
+                else {
+                    self.history.push(Turn::system(
+                        "no provider on the DHT publishes a chunk-server URL for any slice yet.",
+                    ));
+                    self.close_browser();
+                    return;
+                };
+                self.history.push(Turn::system(format!(
+                    "pulling slice [{start}..{end}) of {} from {}",
+                    &cid[..cid.len().min(12)],
+                    &provider.peer_id[..provider.peer_id.len().min(12)],
+                )));
+                let rx = crate::swarm_contribute::start_pull(
+                    cid.clone(),
+                    (start, end),
+                    provider,
+                    self.models_dir.clone(),
+                );
+                self.pulling = Some(rx);
+            }
+            RowKind::Install { entry, .. } => {
+                // If the GGUF is already cached, jump straight to the
+                // split. Otherwise tell the user to download first
+                // (Enter on the same row) and re-press `c` after.
+                let stem = entry.gguf_file.trim_end_matches(".gguf");
+                let cached = self.local_scan.iter().find(|m| m.name == stem).cloned();
+                match cached {
+                    Some(m) if m.is_usable() => {
+                        self.history.push(Turn::system(format!(
+                            "splitting {} → shards in {}/.shards/{}",
+                            entry.display_name,
+                            self.models_dir.display(),
+                            entry.model_cid(),
+                        )));
+                        let rx = crate::contribute::start_split(
+                            entry,
+                            m,
+                            self.models_dir.clone(),
+                        );
+                        self.splitting = Some(rx);
+                    }
+                    Some(m) => {
+                        self.history.push(Turn::system(format!(
+                            "{} is cached but not usable: {}", entry.display_name, m.status_line(),
+                        )));
+                    }
+                    None => {
+                        self.history.push(Turn::system(format!(
+                            "{} isn't cached yet — press Enter on this row to download first, \
+                             then `c` to split + host.",
+                            entry.display_name,
+                        )));
+                    }
+                }
             }
         }
         self.close_browser();
@@ -756,6 +941,107 @@ impl AppState {
             label: entry.display_name.to_string(),
             done: 0, total: Some(entry.size_bytes), bps: 0.0,
         });
+    }
+
+    fn drain_swarm(&mut self) -> bool {
+        let Some(rx) = self.swarm_rx.as_mut() else { return false };
+        let mut dirty = false;
+        while let Ok(models) = rx.try_recv() {
+            self.swarm_models = models;
+            dirty = true;
+            // Rebuild the browser rows in place if the picker is
+            // still open so the user sees the swarm rows pop in.
+            if let View::Browser(_) = &self.view {
+                let probe = Probe::collect();
+                let rows = browser::build_rows(&self.local_scan, &self.swarm_models, &probe);
+                self.view = View::Browser(BrowserState::new(rows));
+            }
+        }
+        if dirty { self.swarm_rx = None; }
+        dirty
+    }
+
+    fn drain_pull(&mut self) -> bool {
+        use crate::swarm_contribute::SwarmPullEvent;
+        let Some(rx) = self.pulling.as_mut() else { return false };
+        let mut dirty = false;
+        while let Ok(ev) = rx.try_recv() {
+            dirty = true;
+            match ev {
+                SwarmPullEvent::Started { manifest_url, range } => {
+                    self.history.push(Turn::system(format!(
+                        "pull: GET {manifest_url} for slice [{}..{})", range.0, range.1,
+                    )));
+                }
+                SwarmPullEvent::ManifestOk { manifest_cid, n_layers } => {
+                    self.history.push(Turn::system(format!(
+                        "pull: manifest ok ({} layers, cid {})",
+                        n_layers,
+                        &manifest_cid[..manifest_cid.len().min(12)],
+                    )));
+                }
+                SwarmPullEvent::ChunksDone { bytes, n_chunks } => {
+                    self.history.push(Turn::system(format!(
+                        "pull: chunks ok ({n_chunks} bundles, {})",
+                        crate::local::human_bytes(bytes),
+                    )));
+                }
+                SwarmPullEvent::Done { kept_ranges, shard_root } => {
+                    let kept_str = kept_ranges.iter()
+                        .map(|(s, e)| format!("[{s}..{e})"))
+                        .collect::<Vec<_>>().join(" ");
+                    self.history.push(Turn::system(format!(
+                        "✓ slice pulled — hosting {kept_str} in {}", shard_root.display(),
+                    )));
+                    self.pulling = None;
+                    break;
+                }
+                SwarmPullEvent::Error(msg) => {
+                    self.history.push(Turn::system(format!("⚠ pull failed: {msg}")));
+                    self.pulling = None;
+                    break;
+                }
+            }
+        }
+        dirty
+    }
+
+    fn drain_split(&mut self) -> bool {
+        use crate::contribute::SplitEvent;
+        let Some(rx) = self.splitting.as_mut() else { return false };
+        let mut dirty = false;
+        while let Ok(ev) = rx.try_recv() {
+            dirty = true;
+            match ev {
+                SplitEvent::Started { gguf, output } => {
+                    self.history.push(Turn::system(format!(
+                        "split: chunking {} → {}", gguf.display(), output.display(),
+                    )));
+                }
+                SplitEvent::Done { manifest_cid, n_bundles, bytes, kept_ranges, shard_root } => {
+                    let kept_str = kept_ranges.iter()
+                        .map(|(s, e)| format!("[{s}..{e})"))
+                        .collect::<Vec<_>>().join(" ");
+                    self.history.push(Turn::system(format!(
+                        "✓ split done — {n_bundles} bundles · {} written · manifest {} · hosting {}",
+                        crate::local::human_bytes(bytes),
+                        &manifest_cid[..manifest_cid.len().min(12)],
+                        kept_str,
+                    )));
+                    self.history.push(Turn::system(format!(
+                        "shards live at {}", shard_root.display(),
+                    )));
+                    self.splitting = None;
+                    break;
+                }
+                SplitEvent::Error(msg) => {
+                    self.history.push(Turn::system(format!("⚠ split failed: {msg}")));
+                    self.splitting = None;
+                    break;
+                }
+            }
+        }
+        dirty
     }
 
     fn drain_download(&mut self) -> bool {
@@ -844,6 +1130,9 @@ async fn run_loop<B: ratatui::backend::Backend>(
         terminal.draw(|f| draw(f, app))?;
         let _ = app.drain_stream();
         let _ = app.drain_download();
+        let _ = app.drain_split();
+        let _ = app.drain_pull();
+        let _ = app.drain_swarm();
         // Expire an armed Ctrl+C window so the toast clears after 1.5s.
         if let Some(t) = app.exit_pending {
             if t.elapsed() >= Duration::from_millis(1500) { app.exit_pending = None; }
@@ -871,6 +1160,23 @@ async fn run_loop<B: ratatui::backend::Backend>(
         }
     }
     Ok(())
+}
+
+/// Walk `<models_dir>/.shards/<cid>/kept_ranges.json` for cids the
+/// local peer hosts. Returns an empty Vec on any read / parse error
+/// so a stale sidecar can't break the picker.
+fn scan_local_kept(models_dir: &std::path::Path) -> Vec<KeptRanges> {
+    let shards = models_dir.join(".shards");
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(&shards) else { return out; };
+    for entry in rd.flatten() {
+        let path = entry.path().join("kept_ranges.json");
+        let Ok(bytes) = std::fs::read(&path) else { continue };
+        if let Ok(k) = serde_json::from_slice::<KeptRanges>(&bytes) {
+            out.push(k);
+        }
+    }
+    out
 }
 
 /// Returns `true` if the app should quit.
@@ -928,6 +1234,7 @@ fn handle_key(app: &mut AppState, k: KeyEvent) -> bool {
         if let View::Browser(state) = &mut app.view {
             match browser::handle_key(state, k) {
                 BrowserAction::Commit      => app.commit_browser(),
+                BrowserAction::Contribute  => app.contribute_browser(),
                 BrowserAction::Close       => app.close_browser(),
                 BrowserAction::Consumed    => {}
                 BrowserAction::Passthrough => {}

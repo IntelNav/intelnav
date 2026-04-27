@@ -73,6 +73,35 @@ impl ChainTarget {
         Ok(Self { peers: parsed, splits: splits.to_vec() })
     }
 
+    /// Build a chain target by greedily picking one provider per
+    /// covered range. `ranges` should be the SwarmModel's range
+    /// coverage (start, end, providers); each range with at least
+    /// one provider that publishes a `forward_url` becomes one peer
+    /// hop. Returns `Err` if the swarm doesn't cover every range.
+    pub fn from_swarm(
+        ranges: &[(u16, u16, Vec<intelnav_net::ProviderRecord>)],
+    ) -> Result<Self> {
+        if ranges.is_empty() {
+            return Err(anyhow!("no ranges to assemble"));
+        }
+        let mut peers  = Vec::with_capacity(ranges.len());
+        let mut splits = Vec::with_capacity(ranges.len());
+        for (start, _end, providers) in ranges {
+            let chosen = providers.iter()
+                .filter(|p| p.forward_url.is_some())
+                .max_by_key(|p| p.minted_at)
+                .ok_or_else(|| anyhow!(
+                    "no provider with a forward_url for layers [{start}..{_end})"
+                ))?;
+            let url = chosen.forward_url.as_ref().unwrap();
+            let addr: SocketAddr = url.parse()
+                .with_context(|| format!("provider forward_url `{url}` is not host:port"))?;
+            peers.push(addr);
+            splits.push(*start);
+        }
+        Ok(Self { peers, splits })
+    }
+
     pub fn summary(&self) -> String {
         let peers: Vec<String> = self.peers.iter().map(|a| a.to_string()).collect();
         format!("{} · splits={:?}", peers.join(","), self.splits)

@@ -114,9 +114,29 @@ pub struct Config {
     /// `INTELNAV_WIRE_DTYPE`.
     #[serde(default = "default_wire_dtype")]
     pub wire_dtype: String,
+
+    /// libp2p listen multiaddr for the swarm node. Empty = pick an
+    /// ephemeral TCP port on every interface. Env: `INTELNAV_LIBP2P_LISTEN`.
+    #[serde(default = "default_libp2p_listen")]
+    pub libp2p_listen: String,
+
+    /// Public `host:port` of this peer's chunk-server, advertised in
+    /// DHT provider records so others can pull our slice's bundles.
+    /// `None` means "I host slices but won't seed them" — others may
+    /// still route inference through us. Env: `INTELNAV_CHUNKS_ADDR`.
+    #[serde(default)]
+    pub chunks_addr: Option<String>,
+
+    /// Public `host:port` of this peer's `pipe_peer` inference TCP
+    /// listener, advertised so others can include us in chains.
+    /// `None` means "I'm a leech — I run inference but don't host."
+    /// Env: `INTELNAV_FORWARD_ADDR`.
+    #[serde(default)]
+    pub forward_addr: Option<String>,
 }
 
 fn default_wire_dtype() -> String { "fp16".into() }
+fn default_libp2p_listen() -> String { "/ip4/0.0.0.0/tcp/0".into() }
 
 impl Default for Config {
     fn default() -> Self {
@@ -136,6 +156,9 @@ impl Default for Config {
             draft_model:   None,
             spec_k:        0,
             wire_dtype:    default_wire_dtype(),
+            libp2p_listen: default_libp2p_listen(),
+            chunks_addr:   None,
+            forward_addr:  None,
         }
     }
 }
@@ -214,6 +237,15 @@ impl Config {
         }
         if let Ok(v) = var("INTELNAV_WIRE_DTYPE") {
             if !v.is_empty() { self.wire_dtype = v; }
+        }
+        if let Ok(v) = var("INTELNAV_LIBP2P_LISTEN") {
+            if !v.is_empty() { self.libp2p_listen = v; }
+        }
+        if let Ok(v) = var("INTELNAV_CHUNKS_ADDR") {
+            self.chunks_addr = if v.is_empty() { None } else { Some(v) };
+        }
+        if let Ok(v) = var("INTELNAV_FORWARD_ADDR") {
+            self.forward_addr = if v.is_empty() { None } else { Some(v) };
         }
         if let Ok(v) = var("INTELNAV_TIER") {
             self.default_tier = match v.to_ascii_lowercase().as_str() {

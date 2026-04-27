@@ -1786,6 +1786,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-stream",
+ "blake3",
+ "bs58",
  "bytes",
  "clap",
  "crossterm",
@@ -1796,6 +1798,8 @@ dependencies = [
  "intelnav-core",
  "intelnav-crypto",
  "intelnav-ggml",
+ "intelnav-model-store",
+ "intelnav-net",
  "intelnav-runtime",
  "libc",
  "ratatui",
@@ -1892,6 +1896,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "blake3",
+ "ciborium",
  "futures",
  "futures-util",
  "hex",

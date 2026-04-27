@@ -13,7 +13,9 @@ path = "src/main.rs"
 [dependencies]
 intelnav-core    = { workspace = true }
 intelnav-crypto  = { workspace = true }
+intelnav-net     = { workspace = true }
 intelnav-runtime = { workspace = true }
+intelnav-model-store = { workspace = true }
 intelnav-ggml    = { path = "../ggml" }
 
 tokio         = { workspace = true }
@@ -34,6 +36,8 @@ bytes         = { workspace = true }
 directories   = { workspace = true }
 toml          = { workspace = true }
 hex           = { workspace = true }
+blake3        = { workspace = true }
+bs58          = { workspace = true }
 async-stream  = { workspace = true }
 unicode-width = "0.2"
 

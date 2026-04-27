@@ -72,29 +72,3 @@ impl PeerDirectory for StaticDirectory {
     fn name(&self) -> &'static str { "static" }
 }
 
-// ----------------------------------------------------------------------
-//  DhtDirectory — placeholder until libp2p wiring lands (M2)
-// ----------------------------------------------------------------------
-
-#[derive(Default)]
-pub struct DhtDirectory {
-    inner: RwLock<HashMap<PeerId, PeerRecord>>,
-}
-
-impl DhtDirectory {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    /// M2 hook: libp2p Kademlia populates this from `Advertise` messages.
-    pub fn feed(&self, record: PeerRecord) {
-        self.inner.write().unwrap().insert(record.peer_id, record);
-    }
-}
-
-#[async_trait]
-impl PeerDirectory for DhtDirectory {
-    async fn all(&self) -> Vec<PeerRecord> {
-        self.inner.read().unwrap().values().cloned().collect()
-    }
-    fn name(&self) -> &'static str { "dht" }
-}
