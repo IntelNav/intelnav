@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="IntelNav" width="160">
+  <img src="assets/logo.svg" alt="IntelNav" width="240" height="240">
 </p>
 
 <h1 align="center">IntelNav</h1>
