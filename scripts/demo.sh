@@ -34,6 +34,13 @@ LOG_DIR="${LOG_DIR:-$ROOT/target/demo-logs}"
 # Resolve binaries — prefer the freshest build.
 INTELNAV_BIN="${INTELNAV_BIN:-$ROOT/target/debug/intelnav}"
 PIPE_PEER_BIN="${PIPE_PEER_BIN:-$ROOT/target/debug/examples/pipe_peer}"
+CHUNK_BIN="${CHUNK_BIN:-$ROOT/target/debug/intelnav-chunk}"
+
+# Path B (stitched-subset) is the default: each peer downloads + loads
+# only its layer slice, not the full GGUF. Set STITCHED=0 to fall back
+# to "every peer mmaps the full file" mode for debugging.
+STITCHED="${STITCHED:-1}"
+CHUNK_PORT="${CHUNK_PORT:-9099}"
 
 # ---------------------------------------------------------------------
 # Sanity checks — fail fast and tell the user what to fix.
@@ -44,6 +51,9 @@ die() { echo "demo: $*" >&2; exit 1; }
 [[ -d "$LIBLLAMA_DIR" ]]        || die "libllama dir not found at $LIBLLAMA_DIR (override with INTELNAV_LIBLLAMA_DIR=…)"
 [[ -f "$INTELNAV_BIN" ]]        || die "intelnav binary not at $INTELNAV_BIN (cargo build -p intelnav-cli)"
 [[ -f "$PIPE_PEER_BIN" ]]       || die "pipe_peer not at $PIPE_PEER_BIN (cargo build -p intelnav-runtime --example pipe_peer)"
+if [[ "$STITCHED" == "1" ]]; then
+    [[ -f "$CHUNK_BIN" ]] || die "intelnav-chunk not at $CHUNK_BIN (cargo build -p intelnav-model-store --features serve --bin intelnav-chunk)"
+fi
 
 mkdir -p "$LOG_DIR"
 
@@ -126,12 +136,43 @@ echo "demo: model     = $GGUF"
 echo "demo: libllama  = $LIBLLAMA_DIR"
 echo "demo: peers     = ${#PORTS[@]} on ports ${PORTS[*]}"
 echo "demo: gateway   = http://127.0.0.1:$GATEWAY_PORT"
+echo "demo: stitched  = $STITCHED"
 echo "demo: logs      = $LOG_DIR"
 echo
 
 export INTELNAV_LIBLLAMA_DIR="$LIBLLAMA_DIR"
 
-# Each peer owns one layer slice and binds its own port.
+# ---------------------------------------------------------------------
+# Path B: chunk the GGUF once, host it, point each peer at the manifest
+# so they download + load only their layer slice. This is the whole
+# reason the project exists — a peer with 8 GiB doesn't keep 19 GiB of
+# weights warm.
+# ---------------------------------------------------------------------
+CHUNK_DIR=""
+MANIFEST_URL=""
+if [[ "$STITCHED" == "1" ]]; then
+    gguf_stem="$(basename "$GGUF" .gguf)"
+    CHUNK_DIR="$ROOT/target/demo-chunks/$gguf_stem"
+    if [[ -f "$CHUNK_DIR/manifest.json" ]]; then
+        echo "demo: chunks   reusing $CHUNK_DIR (delete to re-chunk)"
+    else
+        echo "demo: chunks   chunking $GGUF -> $CHUNK_DIR"
+        mkdir -p "$CHUNK_DIR"
+        "$CHUNK_BIN" chunk "$GGUF" "$CHUNK_DIR" --overwrite >"$LOG_DIR/chunk.out" 2>"$LOG_DIR/chunk.err" \
+            || die "intelnav-chunk failed — see $LOG_DIR/chunk.err"
+    fi
+    start_child "chunk-server" \
+        "$CHUNK_BIN" serve "$CHUNK_DIR" --bind "127.0.0.1:$CHUNK_PORT" >/dev/null
+    wait_for_port "$CHUNK_PORT" "chunk-server"
+    MANIFEST_URL="http://127.0.0.1:$CHUNK_PORT/manifest.json"
+    chunk_size="$(du -sh "$CHUNK_DIR" 2>/dev/null | cut -f1 || echo '?')"
+    echo "demo:   chunk-server ready · $MANIFEST_URL · $chunk_size on disk"
+    echo
+fi
+
+# Each peer owns one layer slice and binds its own port. In stitched
+# mode (the default) it fetches its bundles from the chunk-server and
+# only mmaps its own slice — Path B end-to-end.
 PEER_ADDRS=()
 for i in "${!PORTS[@]}"; do
     port="${PORTS[$i]}"
@@ -139,16 +180,34 @@ for i in "${!PORTS[@]}"; do
     start="${range%:*}"
     end="${range#*:}"
     label="peer-$((i+1))"
-    start_child "$label" \
-        "$PIPE_PEER_BIN" \
-        --gguf "$GGUF" \
-        --start "$start" \
-        --end "$end" \
-        --bind "127.0.0.1:$port" \
-        --device cpu >/dev/null
+    if [[ "$STITCHED" == "1" ]]; then
+        peer_cache="$LOG_DIR/$label-cache"
+        mkdir -p "$peer_cache"
+        start_child "$label" \
+            "$PIPE_PEER_BIN" \
+            --manifest "$MANIFEST_URL" \
+            --chunk-cache "$peer_cache" \
+            --start "$start" \
+            --end "$end" \
+            --bind "127.0.0.1:$port" \
+            --device cpu >/dev/null
+    else
+        start_child "$label" \
+            "$PIPE_PEER_BIN" \
+            --gguf "$GGUF" \
+            --start "$start" \
+            --end "$end" \
+            --bind "127.0.0.1:$port" \
+            --device cpu >/dev/null
+    fi
     PEER_ADDRS+=("127.0.0.1:$port")
     wait_for_port "$port" "$label"
-    echo "demo:   $label ready · layers [$start..$end) · 127.0.0.1:$port"
+    if [[ "$STITCHED" == "1" ]]; then
+        slice_size="$(du -sh "$LOG_DIR/$label-cache" 2>/dev/null | cut -f1 || echo '?')"
+        echo "demo:   $label ready · layers [$start..$end) · 127.0.0.1:$port · stitched · slice $slice_size"
+    else
+        echo "demo:   $label ready · layers [$start..$end) · 127.0.0.1:$port · full-gguf"
+    fi
 done
 echo
 
