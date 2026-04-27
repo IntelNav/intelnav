@@ -1,9 +1,8 @@
 //! N-peer pipeline driver for `RunMode::Network` when the user has
 //! configured a `[peers]` list.
 //!
-//! Mirrors the `Delta` stream shape of [`crate::chat::stream`] and
-//! [`crate::local::LocalDriver::stream`] so the TUI's consumer code
-//! doesn't care which backend is in play.
+//! Mirrors the `Delta` stream shape used by the local driver so the
+//! TUI's consumer code doesn't care which backend is in play.
 //!
 //! One chain per turn: open → prefill → decode → close. A fresh
 //! connection per turn costs ~1ms on LAN and gives us free resilience
@@ -24,7 +23,7 @@ use intelnav_runtime::{
     DevicePref, Dtype, ModelHandle, ModelKind, SamplingCfg, SpecCfg, Tok,
 };
 
-use crate::chat::{ChatMessage, Delta};
+use crate::delta::{ChatMessage, Delta};
 use crate::local::LocalModel;
 
 /// Configured chain target (already parsed from strings).

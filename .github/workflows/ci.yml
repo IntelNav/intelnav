@@ -14,10 +14,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # The runtime+ggml+cli refactors (n_ctx bounds, candle removal,
-  # tui split) leave the workspace warning-free under `cargo build
-  # --workspace --all-targets`. Treat new warnings as errors
-  # everywhere — that's how we keep this clean.
   RUSTFLAGS: -D warnings
 
 jobs:
@@ -51,9 +47,6 @@ jobs:
           key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-check-
 
-      # smoke_load and probe were ported off candle::Tensor to the
-      # Hidden API in the runtime refactor, so --all-targets covers
-      # every example without per-example fallback checks.
       - name: cargo check --workspace --all-targets
         run: cargo check --workspace --all-targets
 
@@ -103,12 +96,9 @@ jobs:
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-test-
 
-      # Every crate except `intelnav-ggml` and `intelnav-runtime` is
-      # pure Rust — `intelnav-ggml` dlopens libllama, `intelnav-runtime`
-      # depends on it, and both get their own integration job below.
-      # We run the other crates here on all three OSes, and turn on the
-      # `serve` feature on `intelnav-model-store` so the axum-based HTTP
-      # surface is also covered cross-platform.
+      # `intelnav-ggml` dlopens libllama and `intelnav-runtime`
+      # depends on it; both get their own integration job below.
+      # The rest is pure Rust and runs on all three OSes here.
       - name: cargo test (pure-Rust crates, model-store with serve + p2p)
         shell: bash
         run: |
@@ -117,13 +107,8 @@ jobs:
             -p intelnav-wire \
             -p intelnav-crypto \
             -p intelnav-net \
-            -p intelnav-gateway \
             -p intelnav-registry \
             -- --test-threads=1
-          # One run with both optional features on so the axum serve
-          # surface, the libp2p phase-4 path, and their integration
-          # tests (ci_roundtrip, http_roundtrip, p2p_roundtrip) all
-          # exercise on every supported OS.
           cargo test --no-fail-fast \
             -p intelnav-model-store --features serve,p2p \
             -- --test-threads=1
@@ -216,9 +201,6 @@ jobs:
           # pack.sh lays out bin/libllama.so + include/, so LIBLLAMA_DIR
           # points at the bin subdir where the loader finds the .so.
           export INTELNAV_LIBLLAMA_DIR="$HOME/.cache/intelnav/libllama/bin"
-          # `--lib --tests` skips the pre-existing example rot
-          # (`smoke_load`, `probe` still call candle-era Hidden APIs).
-          # Path B + bit_identical tests all live under `tests/`.
           cargo test --no-fail-fast --lib --tests \
             -p intelnav-ggml \
             -p intelnav-runtime \

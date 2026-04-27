@@ -1,9 +1,7 @@
 //! In-process inference driver.
 //!
-//! This is the path taken when the CLI runs without a gateway: the
-//! runtime crate loads a GGUF from [`Config::models_dir`] and streams
-//! tokens straight back into the TUI, mirroring the `Delta` stream
-//! shape the HTTP driver emits.
+//! Loads a GGUF from [`Config::models_dir`] via the runtime crate and
+//! streams tokens back into the TUI as `Delta` chunks.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -17,7 +15,7 @@ use intelnav_runtime::{
     ModelHandle, ModelKind, SamplingCfg, Tok,
 };
 
-use crate::chat::{ChatMessage, Delta};
+use crate::delta::{ChatMessage, Delta};
 
 // ======================================================================
 //  Model discovery
@@ -142,7 +140,7 @@ impl LocalDriver {
         Ok(kind)
     }
 
-    /// Stream a reply. Matches the shape of [`crate::chat::stream`].
+    /// Stream a reply.
     pub fn stream(
         &self,
         model: LocalModel,

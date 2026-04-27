@@ -12,7 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 intelnav-core    = { workspace = true }
-intelnav-gateway = { workspace = true }
 intelnav-crypto  = { workspace = true }
 intelnav-runtime = { workspace = true }
 intelnav-ggml    = { path = "../ggml" }

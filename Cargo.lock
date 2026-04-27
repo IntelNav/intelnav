@@ -1795,7 +1795,6 @@ dependencies = [
  "hex",
  "intelnav-core",
  "intelnav-crypto",
- "intelnav-gateway",
  "intelnav-ggml",
  "intelnav-runtime",
  "libc",
@@ -1842,36 +1841,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "x25519-dalek",
-]
-
-[[package]]
-name = "intelnav-gateway"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-stream",
- "async-trait",
- "axum",
- "blake3",
- "bs58",
- "bytes",
- "futures",
- "futures-util",
- "http-body-util",
- "intelnav-core",
- "intelnav-crypto",
- "intelnav-model-store",
- "intelnav-net",
- "intelnav-runtime",
- "intelnav-wire",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
 ]
 
 [[package]]
@@ -1938,25 +1907,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "intelnav-netsim"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "bytes",
- "clap",
- "futures",
- "rand 0.8.6",
- "serde",
- "serde_json",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

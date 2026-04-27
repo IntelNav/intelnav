@@ -44,8 +44,8 @@ cargo clippy --workspace --all-targets -- -D warnings
   `#[allow(unsafe_code)]` inline). Don't introduce `unsafe` elsewhere
   without explicit justification.
 - **`core` has no heavy deps.** Shape-only types. Keep it that way.
-- **`runtime` is the only crate that depends on `candle-*`.** The wire,
-  gateway, and registry stay inference-backend agnostic.
+- **`runtime` is the only crate that depends on `ggml`/`libllama`.** The
+  wire and registry stay inference-backend agnostic.
 - **Protocol messages are additive.** If you add a field to a `Msg`
   variant, use `#[serde(default, skip_serializing_if = "Option::is_none")]`
   so proto-v1 peers still decode.
@@ -71,11 +71,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 - Never push `--force` to `main`. Never skip hooks (`--no-verify`).
 - Don't commit build artifacts (`target/`, `*.aux`, `*.log`).
 - `Cargo.lock` **is** committed (binary workspace).
-- Append one line per session to [`docs/dev/PROGRESS.md`](docs/dev/PROGRESS.md):
-  what moved, what's next. Newest first.
-
----
-
 ## Protocol + spec changes
 
 - The wire protocol is normative. Changes to `Msg` must update
@@ -84,10 +79,6 @@ cargo clippy --workspace --all-targets -- -D warnings
   must update [`specs/shard-registry-v1.md`](specs/shard-registry-v1.md).
 - The threat model is normative. Security-relevant changes must
   update [`specs/security-v1.md`](specs/security-v1.md).
-
-Paper/Petals references are treated as references, not contracts.
-Deviations are fine when they produce cleaner UX or cross-device
-reliability; log them under *Deviations from the paper* in PROGRESS.
 
 ---
 

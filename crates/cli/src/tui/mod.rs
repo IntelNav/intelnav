@@ -50,7 +50,7 @@ use crate::banner::tagline;
 use crate::browser::{self, BrowserAction, BrowserState, RowKind};
 use crate::catalog::CatalogEntry;
 use crate::chain_driver::{ChainDriver, ChainTarget, DraftTarget};
-use crate::chat::{self, ChatMessage, ChatRequest, Delta};
+use crate::delta::{ChatMessage, Delta};
 use crate::download::{self, Event as DlEvent};
 use crate::local::{self, human_bytes, LocalDriver, LocalModel};
 use crate::shimmer;
@@ -105,7 +105,6 @@ pub async fn run(
     }
 
     let mut app = AppState::new(
-        config.gateway_url.clone(),
         config.models_dir.clone(),
         mode,
         local_driver,
@@ -164,7 +163,6 @@ struct DoctorView {
     runtime:    String,
     available:  Vec<String>,
     preferred:  String,
-    gateway:    String,
     models_dir: String,
     model:      String,
     mode:       String,
@@ -179,7 +177,6 @@ struct DownloadProgress {
 }
 
 struct AppState {
-    gateway:     String,
     models_dir:  std::path::PathBuf,
     mode:        RunMode,
     model:       String,
@@ -247,7 +244,6 @@ struct AppState {
 impl AppState {
     #[allow(clippy::too_many_arguments)]
     fn new(
-        gateway:    String,
         models_dir: std::path::PathBuf,
         mode:       RunMode,
         local:      LocalDriver,
@@ -259,7 +255,7 @@ impl AppState {
         tier:       String,
     ) -> Self {
         Self {
-            gateway, models_dir, mode, model, tier, quorum, allow_wan,
+            models_dir, mode, model, tier, quorum, allow_wan,
             local, chain, local_scan,
             history: Vec::new(),
             input:   String::new(),
@@ -294,7 +290,6 @@ impl AppState {
         match self.mode {
             RunMode::Local   => "local".into(),
             RunMode::Network => "network".into(),
-            RunMode::Auto    => "auto".into(),
         }
     }
 
@@ -315,15 +310,11 @@ impl AppState {
                 }
             }
             RunMode::Network => {
-                self.history.push(Turn::system(format!(
-                    "network mode — gateway {}. /mode local to switch offline.",
-                    self.gateway,
-                )));
-            }
-            RunMode::Auto => {
-                self.history.push(Turn::system(
-                    "auto mode — first turn will pick local or network.",
-                ));
+                let msg = match self.chain.target() {
+                    Some(t) => format!("network mode — peer chain {}", t.summary()),
+                    None    => "network mode — no peer chain configured. /peers a:7717,b:7717 6,12 to set one.".into(),
+                };
+                self.history.push(Turn::system(msg));
             }
         }
     }
@@ -494,9 +485,15 @@ impl AppState {
                 let cfg = SamplingCfg::default();
                 self.local.stream(m, messages, cfg)
             }
-            // Network mode with a peer chain configured runs the turn
-            // locally-front-half + chain-tail instead of the gateway.
-            RunMode::Network if self.chain.target().is_some() => {
+            // Network mode runs locally-front-half + chain-tail through
+            // the configured peer pipeline.
+            RunMode::Network => {
+                if self.chain.target().is_none() {
+                    self.emit_fatal(
+                        "no peer chain configured. /peers <host:port,...> <split,...> to set one.".into(),
+                    );
+                    return;
+                }
                 let Some(m) = local::resolve(&self.local_scan, &self.model) else {
                     self.emit_fatal(format!(
                         "peer chain needs the same GGUF locally for the front slice; \
@@ -512,13 +509,6 @@ impl AppState {
                 let cfg = SamplingCfg::default();
                 self.chain.stream(m, messages, cfg)
             }
-            RunMode::Network | RunMode::Auto => chat::stream(ChatRequest {
-                gateway:   self.gateway.clone(),
-                model:     self.model.clone(),
-                messages,
-                quorum:    Some(self.quorum),
-                allow_wan: self.allow_wan,
-            }),
         };
         self.streaming = Some(rx);
     }
@@ -578,7 +568,6 @@ impl AppState {
                     runtime:    p.summary,
                     available:  p.backends.available.iter().map(|s| s.to_string()).collect(),
                     preferred:  p.backends.recommended.to_string(),
-                    gateway:    self.gateway.clone(),
                     models_dir: self.models_dir.display().to_string(),
                     model:      self.model.clone(),
                     mode:       self.backend_label(),
@@ -603,8 +592,7 @@ impl AppState {
 
     /// `/peers` — zero args: show current target. Two args: parse
     /// `host:port,...` and `split,...` and install as the new chain
-    /// target. `/peers clear` removes the chain and falls back to the
-    /// gateway path in Network mode.
+    /// target. `/peers clear` drops the chain.
     fn handle_peers_cmd<'a, I: Iterator<Item = &'a str>>(&mut self, mut parts: I) {
         let a = parts.next();
         let b = parts.next();
@@ -618,7 +606,7 @@ impl AppState {
             }
             (Some("clear"), _) => {
                 self.chain.set_target(None);
-                self.history.push(Turn::system("peer chain cleared — network mode will use gateway"));
+                self.history.push(Turn::system("peer chain cleared"));
             }
             (Some(peers_s), Some(splits_s)) => {
                 let peers: Vec<String> = peers_s.split(',')
@@ -691,9 +679,8 @@ impl AppState {
     }
 
     /// `/wire` — zero args: show current wire dtype. One arg: `fp16`,
-    /// `int8` (or aliases) to switch. Affects the chain driver only
-    /// (gateway path doesn't use ForwardHidden). Takes effect on the
-    /// next turn; no reconnect needed.
+    /// `int8` (or aliases) to switch the chain driver's activation
+    /// dtype. Takes effect on the next turn; no reconnect needed.
     fn handle_wire_cmd<'a, I: Iterator<Item = &'a str>>(&mut self, mut parts: I) {
         use intelnav_runtime::Dtype;
         match parts.next() {
@@ -718,8 +705,7 @@ impl AppState {
     fn open_browser(&mut self) {
         self.local_scan = local::list_models(&self.models_dir);
         let probe = Probe::collect();
-        let remote = fetch_remote_models(&self.gateway);
-        let rows = browser::build_rows(&self.local_scan, remote.as_ref(), &probe);
+        let rows = browser::build_rows(&self.local_scan, None, &probe);
         self.view = View::Browser(BrowserState::new(rows));
     }
 
@@ -1149,7 +1135,6 @@ fn render_doctor(f: &mut ratatui::Frame<'_>, area: Rect, d: &DoctorView) {
     lines.push(Line::from(""));
     lines.push(Line::from(vec![label("mode"),       value(d.mode.clone())]));
     lines.push(Line::from(vec![label("model"),      value(d.model.clone())]));
-    lines.push(Line::from(vec![label("gateway"),    value(d.gateway.clone())]));
     lines.push(Line::from(vec![label("models_dir"), value(d.models_dir.clone())]));
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
@@ -1208,7 +1193,6 @@ fn render_header(f: &mut ratatui::Frame<'_>, area: Rect, app: &AppState) {
     let mode_color = match app.mode {
         RunMode::Local   => t.mode_local,
         RunMode::Network => t.mode_network,
-        RunMode::Auto    => t.mode_auto,
     };
     let mut spans = vec![
         Span::styled("  intelnav  ", theme::accent_bold()),
@@ -1523,24 +1507,5 @@ fn render_status(f: &mut ratatui::Frame<'_>, area: Rect, app: &AppState) {
             area,
         );
     }
-}
-
-/// Fetch `/v1/models` with a tight timeout. Returns `None` if the
-/// gateway isn't reachable — that's fine, the browser just won't show
-/// network rows in that case. Bridges our sync call site into the
-/// ambient multi-thread tokio runtime via `block_in_place`.
-fn fetch_remote_models(gateway: &str) -> Option<serde_json::Value> {
-    let url = format!("{}/v1/models", gateway.trim_end_matches('/'));
-    tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async move {
-            let client = reqwest::Client::builder()
-                .timeout(Duration::from_millis(500))
-                .build()
-                .ok()?;
-            let resp = client.get(&url).send().await.ok()?;
-            if !resp.status().is_success() { return None; }
-            resp.json::<serde_json::Value>().await.ok()
-        })
-    })
 }
 

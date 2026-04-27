@@ -171,7 +171,7 @@ pub fn render(f: &mut ratatui::Frame<'_>, area: Rect, state: &BrowserState) {
 
     if state.rows.is_empty() {
         lines.push(Line::from(Span::styled(
-            "  no models visible — no local cache, no gateway, no catalog hits.",
+            "  no models visible — no local cache, no catalog hits.",
             Style::default().fg(t.subtle),
         )));
     }

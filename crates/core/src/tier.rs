@@ -1,7 +1,7 @@
-//! Latency tiers — paper §5.4 table.
+//! Latency tiers.
 //!
-//! The gateway's chain builder refuses to emit a route that violates the
-//! selected tier's overhead budget; see [`LatencyTier::decode_budget`].
+//! The chain builder refuses to emit a route that violates the selected
+//! tier's overhead budget; see [`LatencyTier::decode_budget`].
 
 use std::time::Duration;
 

@@ -1,8 +1,7 @@
 //! `intelnav` — the user-facing CLI.
 //!
-//! Mirrors the ergonomics of Claude Code: a primary interactive `chat` REPL,
-//! terse one-shot `ask`, plus operator commands (`gateway`, `models`, `peers`,
-//! `health`, `doctor`, `init`).
+//! Primary interactive `chat` REPL, terse one-shot `ask`, plus operator
+//! commands (`models`, `doctor`, `init`, `node`).
 
 #![deny(unsafe_code)]
 
@@ -10,8 +9,8 @@ mod banner;
 mod browser;
 mod catalog;
 mod chain_driver;
-mod chat;
 mod cmd;
+mod delta;
 mod download;
 mod local;
 mod shimmer;
@@ -36,11 +35,7 @@ struct Cli {
     #[arg(long, global = true)]
     config: Option<std::path::PathBuf>,
 
-    /// Gateway URL override. Also settable via INTELNAV_GATEWAY_URL.
-    #[arg(long, global = true, env = "INTELNAV_GATEWAY_URL")]
-    gateway: Option<String>,
-
-    /// Backend mode: auto | local | network. Env: INTELNAV_MODE.
+    /// Backend mode: local | network. Env: INTELNAV_MODE.
     #[arg(long, global = true)]
     mode: Option<RunMode>,
 
@@ -79,17 +74,6 @@ enum Command {
         prompt: Option<String>,
     },
 
-    /// Run the local OpenAI-compatible gateway (paper §10).
-    Gateway {
-        /// Bind address.  Default: 127.0.0.1:8787
-        #[arg(long)]
-        bind: Option<String>,
-
-        /// Disable mDNS peer discovery.
-        #[arg(long)]
-        no_mdns: bool,
-    },
-
     /// Run a contributor (shard) node.  Bridges to the Python shard server.
     Node {
         /// Address of the local shard server's Unix socket or TCP endpoint.
@@ -97,23 +81,14 @@ enum Command {
         shard: String,
     },
 
-    /// List models available on the network.
+    /// List local models in `models_dir`.
     Models {
         /// Print as JSON instead of a formatted table.
         #[arg(long)]
         json: bool,
     },
 
-    /// List peers known to the gateway.
-    Peers {
-        #[arg(long)]
-        json: bool,
-    },
-
-    /// Gateway + upstream + network health snapshot.
-    Health,
-
-    /// Preflight checks (gateway reachable, identity valid, mDNS, etc.).
+    /// Preflight checks (libllama loadable, identity valid, models present).
     Doctor,
 
     /// Write a default config file and generate a peer identity.
@@ -128,11 +103,7 @@ enum Command {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // ---- config ----
     let mut config = Config::load()?;
-    if let Some(g) = cli.gateway {
-        config.gateway_url = g;
-    }
     if let Some(m) = cli.mode {
         config.mode = m;
     }
@@ -184,8 +155,7 @@ async fn main() -> Result<()> {
 
     match cli.command.unwrap_or(Command::Chat { model: None, quorum: None, allow_wan: false }) {
         Command::Chat { model, quorum, allow_wan } => {
-            let mode = resolve_mode(&config).await;
-            tui::run(&config, mode, model, quorum, allow_wan).await
+            tui::run(&config, config.mode, model, quorum, allow_wan).await
         }
         Command::Ask { model, prompt } => {
             let text = match prompt {
@@ -197,40 +167,11 @@ async fn main() -> Result<()> {
                     s
                 }
             };
-            let mode = resolve_mode(&config).await;
-            cmd::ask(&config, mode, model, &text).await
-        }
-        Command::Gateway { bind, no_mdns } => {
-            let mut cfg = config.clone();
-            if let Some(b) = bind { cfg.gateway_bind = b; }
-            intelnav_gateway::run(cfg, !no_mdns).await.map_err(Into::into)
+            cmd::ask(&config, config.mode, model, &text).await
         }
         Command::Node { shard } => cmd::node(&config, &shard).await,
         Command::Models { json } => cmd::models(&config, json).await,
-        Command::Peers { json }  => cmd::peers(&config, json).await,
-        Command::Health          => cmd::health(&config).await,
         Command::Doctor          => cmd::doctor(&config).await,
         Command::Init { force }  => cmd::init(force).await,
-    }
-}
-
-/// Resolve `RunMode::Auto` into a concrete `Local` or `Network` choice
-/// by pinging the configured gateway with a short timeout. Anything
-/// other than `Auto` passes through unchanged.
-async fn resolve_mode(cfg: &Config) -> RunMode {
-    match cfg.mode {
-        RunMode::Local   => RunMode::Local,
-        RunMode::Network => RunMode::Network,
-        RunMode::Auto    => {
-            let url = format!("{}/v1/network/health", cfg.gateway_url.trim_end_matches('/'));
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_millis(350))
-                .build();
-            let ok = match client {
-                Ok(c) => c.get(&url).send().await.map(|r| r.status().is_success()).unwrap_or(false),
-                Err(_) => false,
-            };
-            if ok { RunMode::Network } else { RunMode::Local }
-        }
     }
 }

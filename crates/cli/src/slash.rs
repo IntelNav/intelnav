@@ -16,10 +16,10 @@ pub const OVERLAY_MAX_ITEMS: usize = 5;
 pub const COMMANDS: &[SlashCmd] = &[
     SlashCmd { name: "help",   args: "",                    help: "list commands" },
     SlashCmd { name: "clear",  args: "",                    help: "clear the transcript" },
-    SlashCmd { name: "mode",   args: "<local|network|auto>",help: "pick backend mode" },
+    SlashCmd { name: "mode",   args: "<local|network>",     help: "pick backend mode" },
     SlashCmd { name: "model",  args: "<name>",              help: "switch active model" },
     SlashCmd { name: "models", args: "",                    help: "open the model picker" },
-    SlashCmd { name: "doctor", args: "",                    help: "runtime & gateway snapshot" },
+    SlashCmd { name: "doctor", args: "",                    help: "runtime snapshot" },
     SlashCmd { name: "quorum", args: "<n>",                 help: "set replication quorum" },
     SlashCmd { name: "tier",   args: "<lan|cont|wan>",      help: "set network tier" },
     SlashCmd { name: "peers",  args: "[host:port,... split,...]", help: "configure pipeline peer chain" },

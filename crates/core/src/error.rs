@@ -32,9 +32,6 @@ pub enum Error {
     #[error("config: {0}")]
     Config(String),
 
-    #[error("gateway refused: {0}")]
-    GatewayRefused(String),
-
     #[error("quorum disagreement: {disagreeing} of {total} chains disagreed")]
     QuorumFailed { disagreeing: usize, total: usize },
 
