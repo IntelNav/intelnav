@@ -5,30 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>IntelNav · swarm demo</title>
 <style>
-  /* ---------- design tokens ---------- */
+  /* ---------- design tokens — light theme ---------- */
   :root {
-    --bg:        #0e0f12;
-    --panel:     #15171b;
-    --panel-hi:  #1c1f24;
-    --border:    #2a2d33;
-    --border-hi: #3b3f47;
-    --text:      #e6e6e6;
-    --subtle:    #8a8e96;
-    --inactive:  #5a5e66;
+    --bg:        #f7f6f3;       /* warm off-white, brand-adjacent */
+    --panel:     #ffffff;
+    --panel-hi:  #f0eee8;
+    --border:    #e2dfd6;
+    --border-hi: #c8c4b8;
+    --text:      #1a1a1a;
+    --subtle:    #6a6a72;
+    --inactive:  #b8b8c0;
 
-    --intel:        #d97757;
-    --intel-lit:    #ffb089;
-    --you:          #7ab4e8;
-    --sys:          #808080;
-    --success:      #4eba65;
-    --warning:      #ffc107;
-    --error:        #ff6b80;
-    --network:      #79d5e6;
-    --volunteer:    #4eba65;
-    --cloud:        #c88de8;
-    --gateway:      #ffb089;
+    --intel:        #d97757;    /* brand orange — same on light + dark */
+    --intel-lit:    #c25b3a;    /* darker variant readable on white */
+    --you:          #2563d9;
+    --sys:          #7a7a82;
+    --success:      #2da046;
+    --warning:      #b8860b;
+    --error:        #c8332e;
+    --network:      #2188d8;
+    --volunteer:    #2da046;
+    --cloud:        #7a3fbf;
+    --gateway:      #d97757;
 
-    --radius: 6px;
+    --shadow:    0 2px 6px rgba(20,20,20,0.06);
+    --radius:    6px;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
   }
@@ -54,27 +55,49 @@
     padding: 10px 16px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
     font-size: 13px;
     flex-wrap: wrap;
+    background: var(--panel);
   }
   header .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     color: var(--intel);
     font-weight: 700;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.5px;
     font-family: var(--mono);
+    font-size: 16px;
+    text-decoration: none;
   }
+  header .brand .logo {
+    width: 28px;
+    height: 28px;
+    display: block;
+    flex-shrink: 0;
+  }
+  header .brand .wordmark { line-height: 1; }
   header .pipe { color: var(--inactive); }
   header .label { color: var(--subtle); }
   header .value { color: var(--text); font-family: var(--mono); }
   header .badge {
-    color: var(--bg);
+    color: #fff;
     background: var(--success);
     font-weight: 600;
-    padding: 2px 6px;
+    padding: 2px 7px;
     border-radius: 3px;
     font-size: 11px;
     margin-left: auto;
+  }
+  /* When the header gets crowded (small viewport), the meta line
+     wraps under the brand. Hide the labels and just keep values
+     so the row doesn't double-line. */
+  @media (max-width: 720px) {
+    header { padding: 8px 12px; gap: 10px; font-size: 12px; }
+    header .brand { font-size: 14px; }
+    header .brand .logo { width: 22px; height: 22px; }
+    header .label, header .pipe { display: none; }
   }
   header .synth-flag {
     font-family: var(--mono);
@@ -208,7 +231,7 @@
     font-size: 12px;
     max-width: 380px;
     z-index: 10;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    box-shadow: 0 6px 18px rgba(20,20,20,0.10);
   }
   .toast .ttl {
     color: var(--intel);
@@ -262,7 +285,7 @@
   .turn .cursor {
     display: inline-block;
     width: 7px; height: 14px;
-    background: var(--intel-lit);
+    background: var(--intel);
     margin-left: 1px;
     vertical-align: middle;
     animation: blink 1s steps(1) infinite;
@@ -333,7 +356,7 @@
 
   .stage {
     background:
-      radial-gradient(ellipse at center, rgba(217,119,87,0.08), transparent 70%),
+      radial-gradient(ellipse at center, rgba(217,119,87,0.10), transparent 70%),
       var(--panel-hi);
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -603,7 +626,10 @@
 <body>
 
 <header>
-  <span class="brand">IntelNav</span>
+  <a class="brand" href="/" title="IntelNav demo home">
+    <img class="logo" src="/assets/logo.svg" alt="IntelNav">
+    <span class="wordmark">IntelNav</span>
+  </a>
   <span class="pipe">·</span>
   <span class="label">model</span>
   <span class="value" id="hdr-model">—</span>
@@ -871,6 +897,17 @@ function countProvidersFor(model, peers) {
 // ----------------------------------------------------------------------
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+/// Pull a CSS custom property value off :root. SVG attributes don't
+/// support `var(...)` directly, so the chain renderer asks here once
+/// per draw — cheap enough (single getComputedStyle call cached per
+/// frame) and lets the whole stage flip between light/dark theme by
+/// changing CSS variables.
+let __css_root = null;
+function cssVar(name) {
+  if (!__css_root) __css_root = getComputedStyle(document.documentElement);
+  return __css_root.getPropertyValue(name).trim();
+}
+
 function drawChain(t) {
   const svg = document.getElementById('stage');
   svg.innerHTML = '';
@@ -996,7 +1033,7 @@ function drawNode(svg, x, y, kind, label, color, pulse, subtitle, heat = 0, dimm
   const c = el('circle');
   c.setAttribute('cx', x); c.setAttribute('cy', y);
   c.setAttribute('r', r);
-  c.setAttribute('fill', '#15171b');
+  c.setAttribute('fill', cssVar('--panel'));
   c.setAttribute('stroke', color);
   c.setAttribute('stroke-width', String(2 + heat * 2.5));
   // Dim the node when the swarm is idle and this peer hasn't fired
@@ -1024,7 +1061,7 @@ function drawNode(svg, x, y, kind, label, color, pulse, subtitle, heat = 0, dimm
   const t1 = el('text');
   t1.setAttribute('x', x); t1.setAttribute('y', y + r + 16);
   t1.setAttribute('text-anchor', 'middle');
-  t1.setAttribute('fill', dimmed && heat < 0.05 ? '#8a8e96' : '#e6e6e6');
+  t1.setAttribute('fill', dimmed && heat < 0.05 ? cssVar('--inactive') : cssVar('--text'));
   t1.setAttribute('font-family', 'ui-monospace, monospace');
   t1.setAttribute('font-size', '11');
   t1.textContent = label.length > 14 ? label.slice(0, 13) + '…' : label;
@@ -1034,7 +1071,7 @@ function drawNode(svg, x, y, kind, label, color, pulse, subtitle, heat = 0, dimm
     const t2 = el('text');
     t2.setAttribute('x', x); t2.setAttribute('y', y + r + 30);
     t2.setAttribute('text-anchor', 'middle');
-    t2.setAttribute('fill', '#5a5e66');
+    t2.setAttribute('fill', cssVar('--inactive'));
     t2.setAttribute('font-family', 'ui-monospace, monospace');
     t2.setAttribute('font-size', '10');
     t2.textContent = subtitle;
@@ -1127,7 +1164,7 @@ function drawTraffic() {
   const t = document.createElementNS(ns, 'text');
   t.setAttribute('x', W - 6); t.setAttribute('y', 14);
   t.setAttribute('text-anchor', 'end');
-  t.setAttribute('fill', '#8a8e96');
+  t.setAttribute('fill', cssVar('--subtle'));
   t.setAttribute('font-family', 'ui-monospace, monospace');
   t.setAttribute('font-size', '10.5');
   t.textContent = fmtBytes(state.traffic[state.traffic.length - 1] || 0) + '/s';

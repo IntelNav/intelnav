@@ -1,8 +1,22 @@
-# IntelNav
+<p align="center">
+  <img src="assets/logo.svg" alt="IntelNav" width="160">
+</p>
 
-[![ci](https://github.com/IntelNav/IntelNav/actions/workflows/ci.yml/badge.svg)](https://github.com/IntelNav/IntelNav/actions/workflows/ci.yml)
+<h1 align="center">IntelNav</h1>
 
-**Decentralized, pipeline-parallel LLM inference on ordinary hardware.**
+<p align="center">
+  <strong>Decentralized, pipeline-parallel LLM inference on ordinary hardware.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/IntelNav/IntelNav/actions/workflows/ci.yml">
+    <img src="https://github.com/IntelNav/IntelNav/actions/workflows/ci.yml/badge.svg" alt="ci">
+  </a>
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="license">
+  <img src="https://img.shields.io/badge/rust-1.88+-orange" alt="rust">
+</p>
+
+---
 
 IntelNav chops a large language model into layer slices, spreads the
 slices across peers, and streams hidden states through the chain to

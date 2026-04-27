@@ -26,6 +26,7 @@ pub fn router(state: GatewayState) -> Router {
         // Demo SPA at `/`; the plaintext banner moves to `/banner` so
         // `curl gateway:8787` still works without HTML soup.
         .route("/",                     get(api::demo_index))
+        .route("/assets/logo.svg",      get(api::brand_logo))
         .route("/banner",               get(api::banner))
         .route("/v1/models",            get(api::list_models))
         .route("/v1/network/peers",     get(api::peers))
