@@ -335,6 +335,83 @@
     background: var(--panel-hi);
   }
 
+  /* ---------- network (per-link netsim) panel ---------- */
+  .links { display: grid; grid-template-columns: 1fr; gap: 6px; }
+  .link {
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--network);
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .link.dim { opacity: 0.45; border-left-color: var(--inactive); }
+  .link-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .link-head .tier {
+    font-family: var(--mono);
+    color: var(--network);
+    font-weight: 600;
+  }
+  .link-head .addr {
+    font-family: var(--mono);
+    color: var(--subtle);
+    font-size: 11px;
+  }
+  .link-head .live {
+    margin-left: auto;
+    font-family: var(--mono);
+    color: var(--text);
+    font-size: 11px;
+  }
+  .link-head .live .lbl { color: var(--inactive); }
+  .knobs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .knob {
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: 2px;
+  }
+  .knob .lbl {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--subtle);
+    display: flex;
+    justify-content: space-between;
+  }
+  .knob .lbl .num { color: var(--text); }
+  .knob input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg);
+    outline: none;
+  }
+  .knob input[type=range]::-webkit-slider-thumb,
+  .knob input[type=range]::-moz-range-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--network);
+    border: none;
+    cursor: pointer;
+  }
+  .knob.bad input[type=range]::-webkit-slider-thumb,
+  .knob.bad input[type=range]::-moz-range-thumb {
+    background: var(--error);
+  }
+
   .empty {
     color: var(--inactive);
     font-style: italic;
@@ -425,6 +502,15 @@
           <span class="scale">last 60 s · bytes/s</span>
         </h3>
         <svg class="spark" id="traffic" viewBox="0 0 600 60" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="topo-section" id="network-section">
+        <h3>network
+          <span class="scale">drag to tune live · /v1/network/links</span>
+        </h3>
+        <div class="links" id="links">
+          <div class="empty">netsim disabled — start with <code>scripts/demo.sh</code> (default) to enable.</div>
+        </div>
       </div>
 
       <div class="topo-section">
@@ -928,6 +1014,174 @@ function escapeHtml(s) {
 }
 
 // ----------------------------------------------------------------------
+//  /v1/network/links — render per-link sliders + poll live stats
+// ----------------------------------------------------------------------
+
+// Local copy of each link's params, keyed by index. We render the
+// slider thumbs from this rather than from the polled `stats` so a
+// drag-in-progress doesn't snap back to the server's view between
+// PATCH and the next refetch.
+const linkLocal = Object.create(null);
+// Per-link debounce timers — one PATCH at most every 80 ms while
+// dragging, then a settle PATCH on release.
+const linkDebounce = Object.create(null);
+
+async function pollLinks() {
+  let links;
+  try {
+    const r = await fetch('/v1/network/links', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    links = await r.json();
+  } catch {
+    return; // gateway hiccup; keep last paint
+  }
+  renderLinks(links);
+}
+
+function renderLinks(links) {
+  const root = document.getElementById('links');
+  if (!links || links.length === 0) {
+    root.innerHTML = '<div class="empty">netsim disabled — start with <code>scripts/demo.sh</code> (default) to enable.</div>';
+    return;
+  }
+  // Don't blow the DOM away if a slider is being dragged — that
+  // steals focus and the user's drag dies mid-motion. Just refresh
+  // the live-stats line in place for each row.
+  const focused = root.querySelector('input[type=range]:focus, input[type=range]:active');
+  if (focused) {
+    for (const link of links) {
+      const row = root.querySelector(`.knob[data-idx="${link.index}"]`)?.closest('.link');
+      if (row) updateLinkStatsLine(row, link);
+    }
+    return;
+  }
+  root.innerHTML = '';
+  for (const link of links) {
+    root.appendChild(renderLinkRow(link));
+  }
+}
+
+function updateLinkStatsLine(row, link) {
+  const stats = link.stats;
+  if (!stats) { row.classList.add('dim'); return; }
+  row.classList.remove('dim');
+  const live = row.querySelector('.link-head .live');
+  const fwd = stats.forward_stats || {};
+  const rev = stats.reverse_stats || {};
+  const totalBytesS = (fwd.bytes_recent_s || 0) + (rev.bytes_recent_s || 0);
+  const dropped = (fwd.dropped_chunks || 0) + (rev.dropped_chunks || 0);
+  const lastDelay = Math.max(fwd.last_delay_ms || 0, rev.last_delay_ms || 0);
+  if (live) {
+    live.innerHTML =
+      `<span class="lbl">rtt~</span> ${lastDelay.toFixed(1)} ms` +
+      ` · <span class="lbl">rate</span> ${fmtBytes(totalBytesS)}/s` +
+      ` · <span class="lbl">drops</span> ${dropped}`;
+  }
+}
+
+function renderLinkRow(link) {
+  const stats = link.stats;
+  const dim = !stats;
+  // Pull current params for the slider thumbs. While dragging, the
+  // user's pending values live in linkLocal so the UI doesn't
+  // bounce; otherwise we mirror what the netsim reports.
+  const live = stats?.forward || { delay_ms: 0, jitter_ms: 0, bw_mbps: 0, loss_pct: 0, reorder_pct: 0 };
+  const local = linkLocal[link.index] || live;
+  if (!linkLocal[link.index]) {
+    linkLocal[link.index] = { ...live };
+  }
+
+  const fwd = stats?.forward_stats || {};
+  const rev = stats?.reverse_stats || {};
+  const totalBytesS = (fwd.bytes_recent_s || 0) + (rev.bytes_recent_s || 0);
+  const dropped = (fwd.dropped_chunks || 0) + (rev.dropped_chunks || 0);
+  const lastDelay = Math.max(fwd.last_delay_ms || 0, rev.last_delay_ms || 0);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'link' + (dim ? ' dim' : '');
+  wrap.innerHTML = `
+    <div class="link-head">
+      <span class="tier">${escapeHtml(stats?.label || 'link ' + link.index)}</span>
+      <span class="addr">${escapeHtml(link.peer_addr)}</span>
+      <span class="live">
+        <span class="lbl">rtt~</span> ${lastDelay.toFixed(1)} ms
+        · <span class="lbl">rate</span> ${fmtBytes(totalBytesS)}/s
+        · <span class="lbl">drops</span> ${dropped}
+      </span>
+    </div>
+    <div class="knobs">
+      ${knobHtml(link.index, 'delay_ms',  'delay',  local.delay_ms,  0, 500, 1, 'ms')}
+      ${knobHtml(link.index, 'jitter_ms', 'jitter', local.jitter_ms, 0, 100, 0.5, 'ms')}
+      ${knobHtml(link.index, 'bw_mbps',   'bw',     local.bw_mbps,   1, 1000, 1, 'Mb')}
+      ${knobHtml(link.index, 'loss_pct',  'loss',   local.loss_pct,  0, 0.10, 0.001, '%')}
+    </div>
+  `;
+  // Wire up oninput → debounced PATCH.
+  for (const inp of wrap.querySelectorAll('input[type=range]')) {
+    inp.addEventListener('input', () => onKnob(link.index, inp));
+  }
+  return wrap;
+}
+
+function knobHtml(idx, field, lbl, value, min, max, step, unit) {
+  const cls = (field === 'loss_pct' && value > 0.01) ? 'knob bad' : 'knob';
+  // Loss is stored 0..1 but displayed as %.
+  const display = field === 'loss_pct'
+    ? (value * 100).toFixed(1) + '%'
+    : (Number.isInteger(step) ? value.toFixed(0) : value.toFixed(1)) + (unit === '%' ? '' : '');
+  return `
+    <div class="${cls}" data-idx="${idx}" data-field="${field}">
+      <span class="lbl">${lbl} <span class="num">${display}${unit !== '%' ? ' ' + unit : ''}</span></span>
+      <input type="range" min="${min}" max="${max}" step="${step}" value="${value}">
+    </div>
+  `;
+}
+
+function onKnob(idx, inp) {
+  const knob = inp.closest('.knob');
+  const field = knob.dataset.field;
+  const val = parseFloat(inp.value);
+  const local = linkLocal[idx];
+  if (!local) return;
+  local[field] = val;
+  // Update label inline without re-rendering — re-render would
+  // steal focus from the slider mid-drag.
+  const lbl = knob.querySelector('.lbl .num');
+  if (lbl) {
+    lbl.textContent = field === 'loss_pct'
+      ? (val * 100).toFixed(1) + '%'
+      : (val.toFixed(field === 'jitter_ms' || field === 'loss_pct' ? 1 : 0)) +
+        (field === 'bw_mbps' ? ' Mb' : ' ms');
+  }
+  knob.classList.toggle('bad', field === 'loss_pct' && val > 0.01);
+  scheduleLinkPatch(idx);
+}
+
+function scheduleLinkPatch(idx) {
+  clearTimeout(linkDebounce[idx]);
+  linkDebounce[idx] = setTimeout(() => sendLinkPatch(idx), 80);
+}
+
+async function sendLinkPatch(idx) {
+  const local = linkLocal[idx];
+  if (!local) return;
+  // Symmetric for now — same params on both directions. The wire
+  // schema allows asymmetry; the SPA will grow that affordance once
+  // the demo story needs it.
+  const body = { forward: local, reverse: local };
+  try {
+    await fetch('/v1/network/links/' + idx, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // Best-effort. The next poll will re-paint from the netsim's
+    // canonical state — no spinner needed.
+  }
+}
+
+// ----------------------------------------------------------------------
 //  /v1/swarm/events SSE — light up edges in real time
 // ----------------------------------------------------------------------
 function connectEvents() {
@@ -972,8 +1226,10 @@ function tickHeat() {
 //  boot
 // ----------------------------------------------------------------------
 pollTopology();
+pollLinks();
 connectEvents();
 setInterval(pollTopology, 1500);
+setInterval(pollLinks, 1500);
 setInterval(refreshTopologyAge, 1000);
 setInterval(tickHeat, 220);
 </script>
