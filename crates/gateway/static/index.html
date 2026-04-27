@@ -225,14 +225,24 @@
   }
 
   .stage {
-    background: var(--panel-hi);
+    background:
+      radial-gradient(ellipse at center, rgba(217,119,87,0.08), transparent 70%),
+      var(--panel-hi);
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 10px;
-    min-height: 240px;
+    min-height: 260px;
     position: relative;
   }
-  .stage svg { width: 100%; height: 240px; }
+  .stage svg { width: 100%; height: 260px; }
+  .stage-legend {
+    position: absolute;
+    bottom: 6px;
+    left: 12px;
+    color: var(--inactive);
+    font-family: var(--mono);
+    font-size: 10.5px;
+  }
 
   /* aggregate stat strip above the topology graph */
   .stats {
@@ -335,82 +345,107 @@
     background: var(--panel-hi);
   }
 
-  /* ---------- network (per-link netsim) panel ---------- */
+  /* ---------- network (global profile picker + per-link readout) ---------- */
+  .profile-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .profile-btn {
+    background: var(--panel-hi);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .profile-btn:hover { border-color: var(--border-hi); }
+  .profile-btn .name { font-weight: 600; display: block; }
+  .profile-btn .hint {
+    color: var(--inactive);
+    font-size: 10.5px;
+    display: block;
+    margin-top: 2px;
+  }
+  .profile-btn.active {
+    background: var(--network);
+    color: var(--bg);
+    border-color: var(--network);
+  }
+  .profile-btn.active .hint { color: rgba(14,15,18,0.7); }
+
+  .speed-row {
+    display: grid;
+    grid-template-columns: 70px 1fr 90px;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .speed-row label {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--subtle);
+  }
+  .speed-row .val {
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .speed-row input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 5px;
+    border-radius: 3px;
+    background: linear-gradient(to right, var(--inactive), var(--network));
+    outline: none;
+  }
+  .speed-row input[type=range]::-webkit-slider-thumb,
+  .speed-row input[type=range]::-moz-range-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--network);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+    box-shadow: 0 0 6px var(--network);
+  }
+
   .links { display: grid; grid-template-columns: 1fr; gap: 6px; }
   .link {
     background: var(--panel-hi);
     border: 1px solid var(--border);
     border-left: 3px solid var(--network);
     border-radius: 4px;
-    padding: 8px 10px;
+    padding: 6px 10px;
     font-size: 12px;
-  }
-  .link.dim { opacity: 0.45; border-left-color: var(--inactive); }
-  .link-head {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-  .link-head .tier {
+    gap: 10px;
     font-family: var(--mono);
-    color: var(--network);
-    font-weight: 600;
   }
-  .link-head .addr {
-    font-family: var(--mono);
-    color: var(--subtle);
-    font-size: 11px;
-  }
-  .link-head .live {
-    margin-left: auto;
-    font-family: var(--mono);
-    color: var(--text);
-    font-size: 11px;
-  }
-  .link-head .live .lbl { color: var(--inactive); }
-  .knobs {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-  }
-  .knob {
-    display: grid;
-    grid-template-rows: auto auto;
-    gap: 2px;
-  }
-  .knob .lbl {
-    font-family: var(--mono);
-    font-size: 10.5px;
-    color: var(--subtle);
-    display: flex;
-    justify-content: space-between;
-  }
-  .knob .lbl .num { color: var(--text); }
-  .knob input[type=range] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--bg);
-    outline: none;
-  }
-  .knob input[type=range]::-webkit-slider-thumb,
-  .knob input[type=range]::-moz-range-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--network);
-    border: none;
-    cursor: pointer;
-  }
-  .knob.bad input[type=range]::-webkit-slider-thumb,
-  .knob.bad input[type=range]::-moz-range-thumb {
-    background: var(--error);
-  }
+  .link.dim { opacity: 0.45; border-left-color: var(--inactive); }
+  .link .tier { color: var(--network); font-weight: 600; min-width: 80px; }
+  .link .addr { color: var(--subtle); font-size: 11px; }
+  .link .live { margin-left: auto; color: var(--text); font-size: 11px; }
+  .link .live .lbl { color: var(--inactive); }
+  .link.warn { border-left-color: var(--warning); }
+  .link.warn .tier { color: var(--warning); }
+  .link.error { border-left-color: var(--error); }
+  .link.error .tier { color: var(--error); }
 
   .empty {
     color: var(--inactive);
@@ -506,8 +541,14 @@
 
       <div class="topo-section" id="network-section">
         <h3>network
-          <span class="scale">drag to tune live · /v1/network/links</span>
+          <span class="scale" id="profile-scale">pick a profile, then tune speed</span>
         </h3>
+        <div class="profile-row" id="profile-row"></div>
+        <div class="speed-row">
+          <label>speed</label>
+          <input type="range" id="speed-slider" min="1" max="4" step="0.01" value="2.7">
+          <span class="val" id="speed-val">— Mbps</span>
+        </div>
         <div class="links" id="links">
           <div class="empty">netsim disabled — start with <code>scripts/demo.sh</code> (default) to enable.</div>
         </div>
@@ -548,6 +589,9 @@ const state = {
   heat:       Object.create(null),
   /// last seen seq number from /v1/swarm/events.
   lastSeq:    null,
+  /// wall-clock time of the most recent SSE step, for "idle" detection
+  /// when deciding whether to dim the chain stage.
+  lastEventAt: 0,
 };
 
 // ----------------------------------------------------------------------
@@ -672,93 +716,171 @@ function countProvidersFor(model, peers) {
 }
 
 // ----------------------------------------------------------------------
-//  chain stage — gateway → peer-1 → peer-2 → peer-3 → gateway
+//  chain stage — gateway → peer-1 → … → gateway (sample)
 // ----------------------------------------------------------------------
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 function drawChain(t) {
   const svg = document.getElementById('stage');
   svg.innerHTML = '';
 
-  const W = 600, H = 240;
+  // One-time defs: a soft glow filter the packets and active nodes
+  // inherit. Cheaper than per-element filter strings.
+  const defs = el('defs');
+  defs.innerHTML = `
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="2.6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <radialGradient id="ripple" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="var(--intel-lit)" stop-opacity="0.6"/>
+      <stop offset="60%" stop-color="var(--intel-lit)" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="var(--intel-lit)" stop-opacity="0"/>
+    </radialGradient>
+  `;
+  svg.appendChild(defs);
+
+  const W = 600, H = 260;
   const peers = t.peers.slice(0, 6);
   if (peers.length === 0) {
     drawText(svg, W / 2, H / 2, 'awaiting peers…', 'var(--inactive)');
     return;
   }
 
-  // Linear layout: gateway on the left, peers in a row, gateway hub
-  // returning at the right end (head step).
-  const stops = ['gw'].concat(peers.map((_, i) => 'p' + i)).concat(['head']);
+  // Layout: gateway-embed → peer-1 → … → peer-N → gateway-head.
+  const stops = ['embed'].concat(peers.map(_ => 'peer')).concat(['head']);
   const N = stops.length;
-  const margin = 40;
+  const margin = 50;
   const dx = (W - 2 * margin) / (N - 1);
   const y = H / 2;
 
-  // edges first (drawn under nodes)
+  // Track which hop is "currently active" so the others can dim.
+  // We treat the most recent SSE event as the lit hop; without one
+  // (idle), every active edge gets a steady-but-quiet flow.
+  const lastSeen = state.lastEventAt || 0;
+  const idle = Date.now() - lastSeen > 2500;
+
+  // Background "rail" connecting all stops. A subtle line under
+  // everything so the chain still reads when nothing is flowing.
+  const rail = el('line');
+  rail.setAttribute('x1', margin); rail.setAttribute('y1', y);
+  rail.setAttribute('x2', margin + (N - 1) * dx); rail.setAttribute('y2', y);
+  rail.setAttribute('stroke', 'var(--border)');
+  rail.setAttribute('stroke-width', '1');
+  svg.appendChild(rail);
+
+  // edges first (under nodes). Edge i connects stop i → stop i+1.
   for (let i = 0; i < N - 1; i++) {
     const x1 = margin + i * dx;
     const x2 = margin + (i + 1) * dx;
-    drawEdge(svg, x1, y, x2, y, state.streaming, i, N - 1);
+    // Edge is "hot" if either of its endpoint peers has heat, or
+    // if the chain is streaming.
+    let hot = state.streaming;
+    if (i > 0 && i - 1 < peers.length) {
+      hot = hot || (state.heat[peers[i - 1].id] || 0) > 0.05;
+    }
+    if (i < peers.length) {
+      hot = hot || (state.heat[peers[i].id] || 0) > 0.05;
+    }
+    drawEdge(svg, x1, x2, y, hot, idle);
   }
 
-  // nodes
-  drawNode(svg, margin, y, 'gateway', 'embed', 'var(--gateway)', state.streaming, 'gateway', 0);
+  // Nodes. Gateway-embed left, peers middle, gateway-head right.
+  drawNode(svg, margin, y, 'gateway', 'embed', 'var(--gateway)',
+           state.streaming, 'embed + first slice', 0, idle);
   for (let i = 0; i < peers.length; i++) {
     const p = peers[i];
     const x = margin + (i + 1) * dx;
     const color = p.kind === 'cloud' ? 'var(--cloud)' : 'var(--volunteer)';
     const subtitle = p.layers ? `L ${fmtLayers(p.layers)}` : '';
     const heat = state.heat[p.id] || 0;
-    drawNode(svg, x, y, p.kind, p.id, color, state.streaming || heat > 0.1, subtitle, heat);
+    drawNode(svg, x, y, p.kind, shortLabel(p.id), color,
+             state.streaming || heat > 0.1, subtitle, heat, idle);
   }
-  drawNode(svg, margin + (N - 1) * dx, y, 'gateway', 'head', 'var(--gateway)', state.streaming, 'sample', 0);
+  drawNode(svg, margin + (N - 1) * dx, y, 'gateway', 'sample', 'var(--gateway)',
+           state.streaming, 'last slice + sample', 0, idle);
 
   if (t.peers.length > peers.length) {
-    drawText(svg, W / 2, H - 12, '+' + (t.peers.length - peers.length) + ' more peers', 'var(--inactive)');
+    drawText(svg, W / 2, H - 16, '+' + (t.peers.length - peers.length) + ' more peers',
+             'var(--inactive)');
   }
 }
 
-function drawNode(svg, x, y, kind, label, color, pulse, subtitle, heat = 0) {
-  const ns = 'http://www.w3.org/2000/svg';
-  const g  = document.createElementNS(ns, 'g');
-  const r  = kind === 'gateway' ? 14 : 18;
+function el(tag) { return document.createElementNS(SVG_NS, tag); }
+function shortLabel(s) {
+  if (!s) return '';
+  return s.length > 12 ? s.slice(0, 12) : s;
+}
 
-  // Glow halo proportional to per-peer activity heat (0..1). Stays
-  // 0 when the peer is idle; brightens momentarily on each event.
+function drawNode(svg, x, y, kind, label, color, pulse, subtitle, heat = 0, dimmed = false) {
+  const g  = el('g');
+  const r  = kind === 'gateway' ? 16 : 20;
+
+  // Outer ripple — appears for ~600 ms after the node fires a step
+  // event. Keyed off `heat` so it follows the SSE flow naturally.
+  if (heat > 0.15) {
+    const ripple = el('circle');
+    const rr = r + 6 + heat * 22;
+    ripple.setAttribute('cx', x); ripple.setAttribute('cy', y);
+    ripple.setAttribute('r', rr);
+    ripple.setAttribute('fill', 'url(#ripple)');
+    ripple.setAttribute('opacity', String(0.4 + 0.6 * heat));
+    g.appendChild(ripple);
+  }
+
+  // Solid halo proportional to heat — saturates the node colour.
   if (heat > 0.05) {
-    const halo = document.createElementNS(ns, 'circle');
+    const halo = el('circle');
     halo.setAttribute('cx', x); halo.setAttribute('cy', y);
-    halo.setAttribute('r', r + 6 + heat * 8);
+    halo.setAttribute('r', r + 4 + heat * 6);
     halo.setAttribute('fill', color);
-    halo.setAttribute('opacity', String(0.18 + 0.32 * heat));
+    halo.setAttribute('opacity', String(0.15 + 0.35 * heat));
+    halo.setAttribute('filter', 'url(#glow)');
     g.appendChild(halo);
   }
 
-  const c  = document.createElementNS(ns, 'circle');
+  const c = el('circle');
   c.setAttribute('cx', x); c.setAttribute('cy', y);
   c.setAttribute('r', r);
   c.setAttribute('fill', '#15171b');
   c.setAttribute('stroke', color);
-  c.setAttribute('stroke-width', String(2 + heat * 1.5));
+  c.setAttribute('stroke-width', String(2 + heat * 2.5));
+  // Dim the node when the swarm is idle and this peer hasn't fired
+  // recently — gives the active node a clear contrast pop.
+  if (dimmed && heat < 0.05) {
+    c.setAttribute('opacity', '0.55');
+  }
   if (pulse) {
-    const a = document.createElementNS(ns, 'animate');
+    const a = el('animate');
     a.setAttribute('attributeName', 'r');
-    a.setAttribute('values', `${r};${r + 4};${r}`);
-    a.setAttribute('dur', '1.2s'); a.setAttribute('repeatCount', 'indefinite');
+    a.setAttribute('values', `${r};${r + 3};${r}`);
+    a.setAttribute('dur', '1.6s'); a.setAttribute('repeatCount', 'indefinite');
     c.appendChild(a);
   }
   g.appendChild(c);
 
-  const t1 = document.createElementNS(ns, 'text');
+  // Inner mark — tiny dot for gateway, layer hint for peers.
+  const inner = el('circle');
+  inner.setAttribute('cx', x); inner.setAttribute('cy', y);
+  inner.setAttribute('r', '2.5');
+  inner.setAttribute('fill', color);
+  inner.setAttribute('opacity', String(0.6 + 0.4 * heat));
+  g.appendChild(inner);
+
+  const t1 = el('text');
   t1.setAttribute('x', x); t1.setAttribute('y', y + r + 16);
   t1.setAttribute('text-anchor', 'middle');
-  t1.setAttribute('fill', '#e6e6e6');
+  t1.setAttribute('fill', dimmed && heat < 0.05 ? '#8a8e96' : '#e6e6e6');
   t1.setAttribute('font-family', 'ui-monospace, monospace');
   t1.setAttribute('font-size', '11');
   t1.textContent = label.length > 14 ? label.slice(0, 13) + '…' : label;
   g.appendChild(t1);
 
   if (subtitle) {
-    const t2 = document.createElementNS(ns, 'text');
+    const t2 = el('text');
     t2.setAttribute('x', x); t2.setAttribute('y', y + r + 30);
     t2.setAttribute('text-anchor', 'middle');
     t2.setAttribute('fill', '#5a5e66');
@@ -770,43 +892,50 @@ function drawNode(svg, x, y, kind, label, color, pulse, subtitle, heat = 0) {
   svg.appendChild(g);
 }
 
-function drawEdge(svg, x1, y1, x2, y2, animated, idx, total) {
-  const ns = 'http://www.w3.org/2000/svg';
-  const ln = document.createElementNS(ns, 'line');
-  ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
-  ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
-  ln.setAttribute('stroke', animated ? 'var(--intel)' : 'var(--border-hi)');
-  ln.setAttribute('stroke-width', '1.5');
-  if (animated) {
-    ln.setAttribute('stroke-dasharray', '6,4');
-    const a = document.createElementNS(ns, 'animate');
-    a.setAttribute('attributeName', 'stroke-dashoffset');
-    a.setAttribute('values', '0;-20');
-    a.setAttribute('dur', '0.7s'); a.setAttribute('repeatCount', 'indefinite');
-    a.setAttribute('begin', `${(idx / Math.max(total, 1)) * 0.1}s`);
-    ln.appendChild(a);
+function drawEdge(svg, x1, x2, y, hot, idle) {
+  // Base line — neutral when cold, intel-coloured when hot. Always
+  // visible so the topology reads as connected.
+  const base = el('line');
+  base.setAttribute('x1', x1); base.setAttribute('y1', y);
+  base.setAttribute('x2', x2); base.setAttribute('y2', y);
+  base.setAttribute('stroke', hot ? 'var(--intel)' : 'var(--border-hi)');
+  base.setAttribute('stroke-width', hot ? '2.4' : '1.2');
+  if (hot) base.setAttribute('filter', 'url(#glow)');
+  base.setAttribute('opacity', hot ? '0.85' : (idle ? '0.55' : '0.7'));
+  svg.appendChild(base);
 
-    // Packet dot that physically traverses the edge — reads as
-    // "hidden state moving downstream" much more clearly than dashes.
-    const pkt = document.createElementNS(ns, 'circle');
-    pkt.setAttribute('r', '3.5');
-    pkt.setAttribute('fill', 'var(--intel-lit)');
-    pkt.setAttribute('cy', y1);
-    const ax = document.createElementNS(ns, 'animate');
-    ax.setAttribute('attributeName', 'cx');
-    ax.setAttribute('from', x1); ax.setAttribute('to', x2);
-    ax.setAttribute('dur', '1.1s');
-    ax.setAttribute('repeatCount', 'indefinite');
-    ax.setAttribute('begin', `${idx * 0.18}s`);
-    pkt.appendChild(ax);
-    svg.appendChild(pkt);
+  if (!hot) return;
+
+  // Packet train: 4 staggered dots. The trail effect comes from
+  // each successive dot being smaller and dimmer than the leader.
+  // Travel time is ~0.9 s end-to-end; staggered by 0.18 s gives a
+  // continuous flow with no visible "gap" between cycles.
+  const train = [
+    { r: 4.5, opacity: 1.00, delay: 0.00 },
+    { r: 3.5, opacity: 0.65, delay: 0.18 },
+    { r: 2.8, opacity: 0.45, delay: 0.36 },
+    { r: 2.0, opacity: 0.30, delay: 0.54 },
+  ];
+  for (const dot of train) {
+    const c = el('circle');
+    c.setAttribute('r', dot.r);
+    c.setAttribute('fill', 'var(--intel-lit)');
+    c.setAttribute('cy', y);
+    c.setAttribute('opacity', String(dot.opacity));
+    c.setAttribute('filter', 'url(#glow)');
+    const a = el('animate');
+    a.setAttribute('attributeName', 'cx');
+    a.setAttribute('from', x1); a.setAttribute('to', x2);
+    a.setAttribute('dur', '0.9s');
+    a.setAttribute('repeatCount', 'indefinite');
+    a.setAttribute('begin', `${dot.delay}s`);
+    c.appendChild(a);
+    svg.appendChild(c);
   }
-  svg.appendChild(ln);
 }
 
 function drawText(svg, x, y, text, color) {
-  const ns = 'http://www.w3.org/2000/svg';
-  const t = document.createElementNS(ns, 'text');
+  const t = el('text');
   t.setAttribute('x', x); t.setAttribute('y', y);
   t.setAttribute('text-anchor', 'middle');
   t.setAttribute('fill', color);
@@ -1014,17 +1143,103 @@ function escapeHtml(s) {
 }
 
 // ----------------------------------------------------------------------
-//  /v1/network/links — render per-link sliders + poll live stats
+//  /v1/network/links — global profile picker + per-link readout
 // ----------------------------------------------------------------------
 
-// Local copy of each link's params, keyed by index. We render the
-// slider thumbs from this rather than from the polled `stats` so a
-// drag-in-progress doesn't snap back to the server's view between
-// PATCH and the next refetch.
-const linkLocal = Object.create(null);
-// Per-link debounce timers — one PATCH at most every 80 ms while
-// dragging, then a settle PATCH on release.
-const linkDebounce = Object.create(null);
+// One profile per "where are these peers running." Each profile picks
+// a baseline RTT, jitter, and loss; the speed slider sets the
+// bandwidth that all four links inherit. Per-link variance keeps the
+// swarm from looking like four identical clones.
+const PROFILES = {
+  lan:   { name: 'LAN',     hint: 'same switch · ~2 ms',   delay:   2, jitter:  0.5, loss: 0.000, defaultMbps: 1000, label: 'LAN'      },
+  metro: { name: 'Metro',   hint: 'city/ISP · ~25 ms',     delay:  25, jitter:  4.0, loss: 0.000, defaultMbps:  300, label: 'Metro'    },
+  wan:   { name: 'WAN',     hint: 'cross-country · ~80 ms',delay:  80, jitter: 12.0, loss: 0.001, defaultMbps:  100, label: 'WAN'      },
+  bad:   { name: 'Bad WAN', hint: 'lossy 4G · ~140 ms',    delay: 140, jitter: 25.0, loss: 0.020, defaultMbps:   30, label: 'Bad WAN'  },
+};
+const PROFILE_ORDER = ['lan', 'metro', 'wan', 'bad'];
+
+const netState = {
+  profile:   'wan',                   // active profile key
+  speedMbps: 100,                     // current bandwidth (all links)
+  linkCount: 0,                       // populated from first /v1/network/links
+};
+
+function paramsForLink(i) {
+  const p = PROFILES[netState.profile];
+  // Per-link variance — small fan-out around the profile centre so
+  // the four hops don't move in perfect lockstep.
+  const lat   = p.delay  * (0.85 + 0.10 * i);   // 85%, 95%, 105%, 115%
+  const jit   = p.jitter * (0.80 + 0.15 * (i % 3));
+  const speed = netState.speedMbps * (1.10 - 0.06 * i); // tail link a bit slower
+  return {
+    delay_ms:    lat,
+    jitter_ms:   jit,
+    bw_mbps:     Math.max(1, speed),
+    loss_pct:    p.loss,
+    reorder_pct: p.loss > 0 ? 0.005 : 0.0,
+  };
+}
+
+function renderProfileRow() {
+  const root = document.getElementById('profile-row');
+  root.innerHTML = '';
+  for (const key of PROFILE_ORDER) {
+    const p = PROFILES[key];
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'profile-btn' + (netState.profile === key ? ' active' : '');
+    btn.dataset.profile = key;
+    btn.innerHTML = `<span class="name">${p.name}</span><span class="hint">${p.hint}</span>`;
+    btn.addEventListener('click', () => selectProfile(key));
+    root.appendChild(btn);
+  }
+}
+
+function selectProfile(key) {
+  netState.profile = key;
+  // Snap the speed slider to the profile's natural bandwidth so the
+  // first impression of "WAN" is actually slow, not pinned at 1 Gb.
+  netState.speedMbps = PROFILES[key].defaultMbps;
+  syncSpeedSlider();
+  renderProfileRow();
+  applyProfileToAll();
+}
+
+function syncSpeedSlider() {
+  // Slider is a log scale 10 Mbps → 10 000 Mbps.
+  const s = document.getElementById('speed-slider');
+  s.value = Math.log10(netState.speedMbps).toFixed(2);
+  document.getElementById('speed-val').textContent = fmtMbps(netState.speedMbps);
+}
+
+function fmtMbps(m) {
+  if (m >= 1000) return (m / 1000).toFixed(m >= 10000 ? 0 : 1) + ' Gbps';
+  return m.toFixed(m >= 100 ? 0 : 1) + ' Mbps';
+}
+
+let speedDebounce = null;
+function onSpeedSlider() {
+  const s = document.getElementById('speed-slider');
+  netState.speedMbps = Math.pow(10, parseFloat(s.value));
+  document.getElementById('speed-val').textContent = fmtMbps(netState.speedMbps);
+  clearTimeout(speedDebounce);
+  speedDebounce = setTimeout(applyProfileToAll, 80);
+}
+
+async function applyProfileToAll() {
+  if (!netState.linkCount) return;
+  const reqs = [];
+  for (let i = 0; i < netState.linkCount; i++) {
+    const p = paramsForLink(i);
+    const body = { forward: p, reverse: p, label: PROFILES[netState.profile].label };
+    reqs.push(fetch('/v1/network/links/' + i, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})); // best-effort
+  }
+  await Promise.all(reqs);
+}
 
 async function pollLinks() {
   let links;
@@ -1033,7 +1248,14 @@ async function pollLinks() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     links = await r.json();
   } catch {
-    return; // gateway hiccup; keep last paint
+    return;
+  }
+  if (links.length !== netState.linkCount) {
+    netState.linkCount = links.length;
+    // First time we learned the count — stamp the active profile so
+    // the SPA's view is the source of truth (instead of whatever the
+    // demo script set at startup).
+    applyProfileToAll();
   }
   renderLinks(links);
 }
@@ -1044,141 +1266,37 @@ function renderLinks(links) {
     root.innerHTML = '<div class="empty">netsim disabled — start with <code>scripts/demo.sh</code> (default) to enable.</div>';
     return;
   }
-  // Don't blow the DOM away if a slider is being dragged — that
-  // steals focus and the user's drag dies mid-motion. Just refresh
-  // the live-stats line in place for each row.
-  const focused = root.querySelector('input[type=range]:focus, input[type=range]:active');
-  if (focused) {
-    for (const link of links) {
-      const row = root.querySelector(`.knob[data-idx="${link.index}"]`)?.closest('.link');
-      if (row) updateLinkStatsLine(row, link);
-    }
-    return;
-  }
   root.innerHTML = '';
   for (const link of links) {
     root.appendChild(renderLinkRow(link));
   }
 }
 
-function updateLinkStatsLine(row, link) {
-  const stats = link.stats;
-  if (!stats) { row.classList.add('dim'); return; }
-  row.classList.remove('dim');
-  const live = row.querySelector('.link-head .live');
-  const fwd = stats.forward_stats || {};
-  const rev = stats.reverse_stats || {};
-  const totalBytesS = (fwd.bytes_recent_s || 0) + (rev.bytes_recent_s || 0);
-  const dropped = (fwd.dropped_chunks || 0) + (rev.dropped_chunks || 0);
-  const lastDelay = Math.max(fwd.last_delay_ms || 0, rev.last_delay_ms || 0);
-  if (live) {
-    live.innerHTML =
-      `<span class="lbl">rtt~</span> ${lastDelay.toFixed(1)} ms` +
-      ` · <span class="lbl">rate</span> ${fmtBytes(totalBytesS)}/s` +
-      ` · <span class="lbl">drops</span> ${dropped}`;
-  }
-}
-
 function renderLinkRow(link) {
   const stats = link.stats;
-  const dim = !stats;
-  // Pull current params for the slider thumbs. While dragging, the
-  // user's pending values live in linkLocal so the UI doesn't
-  // bounce; otherwise we mirror what the netsim reports.
-  const live = stats?.forward || { delay_ms: 0, jitter_ms: 0, bw_mbps: 0, loss_pct: 0, reorder_pct: 0 };
-  const local = linkLocal[link.index] || live;
-  if (!linkLocal[link.index]) {
-    linkLocal[link.index] = { ...live };
-  }
-
   const fwd = stats?.forward_stats || {};
   const rev = stats?.reverse_stats || {};
+  const fwdParams = stats?.forward || {};
   const totalBytesS = (fwd.bytes_recent_s || 0) + (rev.bytes_recent_s || 0);
   const dropped = (fwd.dropped_chunks || 0) + (rev.dropped_chunks || 0);
   const lastDelay = Math.max(fwd.last_delay_ms || 0, rev.last_delay_ms || 0);
 
-  const wrap = document.createElement('div');
-  wrap.className = 'link' + (dim ? ' dim' : '');
-  wrap.innerHTML = `
-    <div class="link-head">
-      <span class="tier">${escapeHtml(stats?.label || 'link ' + link.index)}</span>
-      <span class="addr">${escapeHtml(link.peer_addr)}</span>
-      <span class="live">
-        <span class="lbl">rtt~</span> ${lastDelay.toFixed(1)} ms
-        · <span class="lbl">rate</span> ${fmtBytes(totalBytesS)}/s
-        · <span class="lbl">drops</span> ${dropped}
-      </span>
-    </div>
-    <div class="knobs">
-      ${knobHtml(link.index, 'delay_ms',  'delay',  local.delay_ms,  0, 500, 1, 'ms')}
-      ${knobHtml(link.index, 'jitter_ms', 'jitter', local.jitter_ms, 0, 100, 0.5, 'ms')}
-      ${knobHtml(link.index, 'bw_mbps',   'bw',     local.bw_mbps,   1, 1000, 1, 'Mb')}
-      ${knobHtml(link.index, 'loss_pct',  'loss',   local.loss_pct,  0, 0.10, 0.001, '%')}
-    </div>
+  let cls = 'link';
+  if (!stats)                                cls += ' dim';
+  else if ((fwdParams.loss_pct || 0) > 0.005) cls += ' error';
+  else if ((fwdParams.delay_ms || 0) > 60)    cls += ' warn';
+
+  const div = document.createElement('div');
+  div.className = cls;
+  div.innerHTML = `
+    <span class="tier">${escapeHtml(stats?.label || 'link ' + link.index)}</span>
+    <span class="addr">${escapeHtml(link.peer_addr)}</span>
+    <span class="live">
+      <span class="lbl">cfg</span> ${(fwdParams.delay_ms || 0).toFixed(0)} ms · ${fmtMbps(fwdParams.bw_mbps || 0)}
+      &nbsp;·&nbsp; <span class="lbl">live</span> ${lastDelay.toFixed(1)} ms · ${fmtBytes(totalBytesS)}/s · drops ${dropped}
+    </span>
   `;
-  // Wire up oninput → debounced PATCH.
-  for (const inp of wrap.querySelectorAll('input[type=range]')) {
-    inp.addEventListener('input', () => onKnob(link.index, inp));
-  }
-  return wrap;
-}
-
-function knobHtml(idx, field, lbl, value, min, max, step, unit) {
-  const cls = (field === 'loss_pct' && value > 0.01) ? 'knob bad' : 'knob';
-  // Loss is stored 0..1 but displayed as %.
-  const display = field === 'loss_pct'
-    ? (value * 100).toFixed(1) + '%'
-    : (Number.isInteger(step) ? value.toFixed(0) : value.toFixed(1)) + (unit === '%' ? '' : '');
-  return `
-    <div class="${cls}" data-idx="${idx}" data-field="${field}">
-      <span class="lbl">${lbl} <span class="num">${display}${unit !== '%' ? ' ' + unit : ''}</span></span>
-      <input type="range" min="${min}" max="${max}" step="${step}" value="${value}">
-    </div>
-  `;
-}
-
-function onKnob(idx, inp) {
-  const knob = inp.closest('.knob');
-  const field = knob.dataset.field;
-  const val = parseFloat(inp.value);
-  const local = linkLocal[idx];
-  if (!local) return;
-  local[field] = val;
-  // Update label inline without re-rendering — re-render would
-  // steal focus from the slider mid-drag.
-  const lbl = knob.querySelector('.lbl .num');
-  if (lbl) {
-    lbl.textContent = field === 'loss_pct'
-      ? (val * 100).toFixed(1) + '%'
-      : (val.toFixed(field === 'jitter_ms' || field === 'loss_pct' ? 1 : 0)) +
-        (field === 'bw_mbps' ? ' Mb' : ' ms');
-  }
-  knob.classList.toggle('bad', field === 'loss_pct' && val > 0.01);
-  scheduleLinkPatch(idx);
-}
-
-function scheduleLinkPatch(idx) {
-  clearTimeout(linkDebounce[idx]);
-  linkDebounce[idx] = setTimeout(() => sendLinkPatch(idx), 80);
-}
-
-async function sendLinkPatch(idx) {
-  const local = linkLocal[idx];
-  if (!local) return;
-  // Symmetric for now — same params on both directions. The wire
-  // schema allows asymmetry; the SPA will grow that affordance once
-  // the demo story needs it.
-  const body = { forward: local, reverse: local };
-  try {
-    await fetch('/v1/network/links/' + idx, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    // Best-effort. The next poll will re-paint from the netsim's
-    // canonical state — no spinner needed.
-  }
+  return div;
 }
 
 // ----------------------------------------------------------------------
@@ -1190,6 +1308,7 @@ function connectEvents() {
     let ev;
     try { ev = JSON.parse(e.data); } catch { return; }
     state.lastSeq = ev.seq;
+    state.lastEventAt = Date.now();
     // Push activity heat onto the matching peer.
     state.heat[ev.peer_id] = 1.0;
     // Bump traffic by what this hop carried — 1500ms polling
@@ -1227,6 +1346,9 @@ function tickHeat() {
 // ----------------------------------------------------------------------
 pollTopology();
 pollLinks();
+renderProfileRow();
+syncSpeedSlider();
+document.getElementById('speed-slider').addEventListener('input', onSpeedSlider);
 connectEvents();
 setInterval(pollTopology, 1500);
 setInterval(pollLinks, 1500);
