@@ -819,7 +819,7 @@ pub async fn demo_index() -> impl IntoResponse {
     axum::response::Html(include_str!("../static/index.html"))
 }
 
-/// Brand mark — IntelNav logo, served at `/assets/logo.svg` so the
+/// Brand mark — IntelNav banner, served at `/assets/banner.svg` so the
 /// SPA's `<img>` tag and the GitHub README can point at the same
 /// canonical source. SVG bytes are baked into the binary so a
 /// release tarball doesn't need to ship a separate static dir.
@@ -829,7 +829,7 @@ pub async fn brand_logo() -> impl IntoResponse {
             (axum::http::header::CONTENT_TYPE, "image/svg+xml"),
             (axum::http::header::CACHE_CONTROL, "public, max-age=86400"),
         ],
-        include_str!("../../../assets/logo.svg"),
+        include_str!("../../../assets/banner.svg"),
     )
 }
 

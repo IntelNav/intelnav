@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="IntelNav" width="240" height="240">
+  <img src="assets/banner.svg" alt="IntelNav" width="640">
 </p>
-
-<h1 align="center">IntelNav</h1>
 
 <p align="center">
   <strong>Decentralized, pipeline-parallel LLM inference on ordinary hardware.</strong>
