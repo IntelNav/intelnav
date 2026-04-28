@@ -104,6 +104,16 @@ pub fn find(id: &str) -> Option<&'static CatalogEntry> {
     CATALOG.iter().find(|e| e.id.eq_ignore_ascii_case(id))
 }
 
+/// Best-effort lookup of a catalog entry given a local model name
+/// (the GGUF file stem, no extension). Lets the contribute flow on a
+/// Local row reuse the catalog's split + block_count metadata.
+pub fn find_by_local_name(name: &str) -> Option<&'static CatalogEntry> {
+    CATALOG.iter().find(|e| {
+        let stem = e.gguf_file.trim_end_matches(".gguf");
+        stem.eq_ignore_ascii_case(name)
+    })
+}
+
 const GB: u64 = 1024 * 1024 * 1024;
 const MB: u64 = 1024 * 1024;
 

@@ -1027,10 +1027,51 @@ impl AppState {
         if !row.contribute_ok { return; }
 
         match row.kind {
-            RowKind::Local { .. } => {
-                self.history.push(Turn::system(
-                    "this model is already cached — nothing to contribute.",
-                ));
+            RowKind::Local { path } => {
+                // Treat a local cached GGUF as a contribute candidate:
+                // look up the catalog entry by file-stem name so we
+                // know its block count + standard split list, then
+                // run the same chunker flow as the hub→split path.
+                let stem = path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .trim_end_matches(".gguf");
+                let entry = crate::catalog::find_by_local_name(stem);
+                let local = self.local_scan.iter().find(|m| m.path == path).cloned();
+                match (entry, local) {
+                    (Some(entry), Some(m)) if m.is_usable() => {
+                        self.history.push(Turn::system(format!(
+                            "splitting {} → shards in {}/.shards/{}",
+                            entry.display_name,
+                            self.models_dir.display(),
+                            entry.model_cid(),
+                        )));
+                        let rx = crate::contribute::start_split(
+                            entry,
+                            m,
+                            self.models_dir.clone(),
+                        );
+                        self.splitting = Some(rx);
+                    }
+                    (None, _) => {
+                        self.history.push(Turn::system(format!(
+                            "`{stem}` isn't in the catalog — hosting an arbitrary GGUF \
+                             needs catalog metadata (block_count, standard splits). \
+                             Either pick a hub row in /models, or add this model to \
+                             crates/app/src/catalog.rs first.",
+                        )));
+                    }
+                    (_, Some(m)) => {
+                        self.history.push(Turn::system(format!(
+                            "{stem} cached but not usable: {}", m.status_line(),
+                        )));
+                    }
+                    (_, None) => {
+                        self.history.push(Turn::system(format!(
+                            "{stem}: local file vanished between scans — reopen /models",
+                        )));
+                    }
+                }
             }
             RowKind::Swarm { cid, .. } => {
                 let Some(sm) = self.swarm_models.iter().find(|m| m.cid == cid) else {
