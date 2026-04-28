@@ -11,7 +11,11 @@ pub struct SlashCmd {
     pub help: &'static str,
 }
 
-pub const OVERLAY_MAX_ITEMS: usize = 5;
+/// Cap on rows the autocomplete overlay shows. Sized so every
+/// command fits on a typical terminal — the catalog is small enough
+/// that scrolling the overlay isn't worth implementing. Bump if/when
+/// it grows past this.
+pub const OVERLAY_MAX_ITEMS: usize = 16;
 
 pub const COMMANDS: &[SlashCmd] = &[
     SlashCmd { name: "help",   args: "",                    help: "list commands" },
