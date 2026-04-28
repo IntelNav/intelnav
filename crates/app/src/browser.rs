@@ -88,13 +88,19 @@ pub fn build_rows(
     // 1. Locally cached.
     for m in local {
         if !m.is_usable() { continue; }
+        // contribute_ok is true when this local file matches a catalog
+        // entry — that's what lets the contribute flow chunk it (we
+        // need the catalog's block_count + standard splits to know
+        // where to slice). An off-catalog GGUF can be chatted with
+        // but not hosted as slices.
+        let catalog_match = crate::catalog::find_by_local_name(&m.name).is_some();
         out.push(SourceRow {
             model:  m.name.clone(),
             tag:    "local",
             detail: format!("cached · {}", human_bytes(m.size_bytes)),
             kind:   RowKind::Local { path: m.path.clone() },
             enabled: true,
-            contribute_ok: false,
+            contribute_ok: catalog_match,
         });
     }
 
