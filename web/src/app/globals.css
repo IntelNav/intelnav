@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Single source of truth for the dark / light palette. Tailwind's
+ * `dark:` modifier flips on `prefers-color-scheme: dark`. */
+:root {
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+    --line: #d0d7de;
+    --fg: #1f2328;
+    --strong: #1f2328;
+    --muted: #57606a;
+    --faint: #6e7681;
+    --accent: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --line: #30363d;
+        --fg: #c9d1d9;
+        --strong: #f0f6fc;
+        --muted: #8b949e;
+        --faint: #6e7681;
+        --accent: #58a6ff;
+    }
+}
+
+html, body {
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Inline `code` mid-paragraph — distinct from the `Code` block component. */
+:not(pre) > code {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+    font-size: 0.92em;
+    color: var(--strong);
+}
+
+/* Anchored heading offset so /docs#section-id doesn't sit under the
+ * sticky nav. Matches `Nav` height (3.5rem). */
+:target {
+    scroll-margin-top: 4rem;
+}
