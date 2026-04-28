@@ -26,6 +26,7 @@ pub const COMMANDS: &[SlashCmd] = &[
     SlashCmd { name: "hosting", args: "",                   help: "view + manage slices you host" },
     SlashCmd { name: "leave",   args: "<cid> <start> <end>", help: "graceful drain of a hosted slice" },
     SlashCmd { name: "service", args: "<install|status|uninstall>", help: "manage the intelnav-node systemd unit" },
+    SlashCmd { name: "keybindings", args: "",                help: "list every keyboard shortcut" },
     SlashCmd { name: "doctor", args: "",                    help: "runtime snapshot" },
     SlashCmd { name: "quorum", args: "<n>",                 help: "set replication quorum" },
     SlashCmd { name: "tier",   args: "<lan|cont|wan>",      help: "set network tier" },

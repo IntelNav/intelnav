@@ -26,7 +26,7 @@ mod wrap;
 use std::io;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossterm::event::{
     self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEvent, KeyEventKind,
     KeyModifiers,
@@ -294,6 +294,12 @@ struct AppState {
     /// within the window exits. Resets when the user types anything
     /// else, or when the window expires on the main-loop tick.
     exit_pending: Option<Instant>,
+    /// First ESC in the chat view arms a 600 ms clear confirmation;
+    /// a second ESC within the window clears the input.
+    clear_pending: Option<Instant>,
+    /// Ring of recent input snapshots for Ctrl+Shift+_ undo. Each
+    /// mutating edit pushes (input, cursor) before the change.
+    input_undo: std::collections::VecDeque<(String, usize)>,
 }
 
 impl AppState {
@@ -337,8 +343,52 @@ impl AppState {
             start:       Instant::now(),
             should_quit: false,
             exit_pending: None,
+            clear_pending: None,
+            input_undo: std::collections::VecDeque::with_capacity(UNDO_HISTORY_CAP),
         }
     }
+
+    /// Snapshot the current input + cursor into the undo ring before
+    /// any edit. Bounded to [`UNDO_HISTORY_CAP`] entries.
+    fn push_undo(&mut self) {
+        if self.input_undo.len() >= UNDO_HISTORY_CAP {
+            self.input_undo.pop_front();
+        }
+        self.input_undo.push_back((self.input.clone(), self.cursor));
+    }
+
+    /// Pop the most recent input snapshot. Returns `true` if there
+    /// was something to undo.
+    fn pop_undo(&mut self) -> bool {
+        if let Some((s, c)) = self.input_undo.pop_back() {
+            self.input  = s;
+            self.cursor = c;
+            self.history_idx = None;
+            self.sugg_idx = 0;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Cycle to the next *usable* local model in `local_scan`.
+    /// No-op if there are zero or one usable models.
+    fn cycle_model(&mut self) {
+        let usable: Vec<&LocalModel> = self.local_scan.iter().filter(|m| m.is_usable()).collect();
+        if usable.len() <= 1 { return; }
+        let cur = usable.iter().position(|m| m.name == self.model).unwrap_or(0);
+        let next = usable[(cur + 1) % usable.len()];
+        self.model = next.name.clone();
+        self.history.push(Turn::system(format!("model → {}", self.model)));
+    }
+}
+
+/// How many input snapshots to keep for Ctrl+Shift+_ undo. Each entry
+/// is a (String, usize); 32 is plenty for a session's typing history
+/// without measurable memory cost.
+const UNDO_HISTORY_CAP: usize = 32;
+
+impl AppState {
 
     fn is_streaming(&self) -> bool { self.streaming.is_some() }
     fn is_downloading(&self) -> bool { self.download.is_some() }
@@ -648,6 +698,7 @@ impl AppState {
             "hosting" => self.handle_hosting_cmd(),
             "leave" => self.handle_leave_cmd(parts),
             "service" => self.handle_service_cmd(parts),
+            "keybindings" | "keys" => self.show_keybindings(),
             "quit" | "exit" => { self.should_quit = true; }
             other => self.history.push(Turn::system(format!("unknown command: /{other}"))),
         }
@@ -718,6 +769,28 @@ impl AppState {
             Err(e) => format!("/leave: daemon unreachable: {e}"),
         };
         self.history.push(Turn::system(msg));
+    }
+
+    /// `/keybindings` — list every keyboard shortcut. Single source of
+    /// truth so users don't have to grep the source.
+    fn show_keybindings(&mut self) {
+        let msg = "\
+            keybindings:\n  \
+              ↵                  send the prompt\n  \
+              shift + ↵          newline (also: \\ + ↵)\n  \
+              esc esc            clear input (double-tap within 600 ms)\n  \
+              ctrl + c           cancel stream / clear input. twice within 1.5s = quit\n  \
+              ctrl + d           quit when input is empty\n  \
+              ctrl + l           clear transcript\n  \
+              ctrl + g           edit current input in $EDITOR\n  \
+              ctrl + shift + _   undo last input edit\n  \
+              alt + p            cycle to next cached model\n  \
+              ↑ / ↓              prompt history (when cursor is on first/last input row)\n  \
+              tab                accept slash-completion\n  \
+              page up / down     scroll transcript\n  \
+              shift + home/end   jump to start/end of transcript\n  \
+              ctrl + z           suspend (terminal default; resume with `fg`)";
+        self.history.push(Turn::system(msg.to_string()));
     }
 
     /// `/service install|status|uninstall` — manage the systemd user unit.
@@ -1243,6 +1316,9 @@ async fn run_loop<B: ratatui::backend::Backend>(
         if let Some(t) = app.exit_pending {
             if t.elapsed() >= Duration::from_millis(1500) { app.exit_pending = None; }
         }
+        if let Some(t) = app.clear_pending {
+            if t.elapsed() >= Duration::from_millis(600) { app.clear_pending = None; }
+        }
         if app.should_quit { break; }
 
         let timeout = tick_rate
@@ -1289,8 +1365,31 @@ fn scan_local_kept(models_dir: &std::path::Path) -> Vec<KeptRanges> {
 fn handle_key(app: &mut AppState, k: KeyEvent) -> bool {
     const EXIT_WINDOW: Duration = Duration::from_millis(1500);
 
+    const CLEAR_WINDOW: Duration = Duration::from_millis(600);
+
     if k.modifiers.contains(KeyModifiers::CONTROL) {
         match k.code {
+            // Ctrl+Shift+_  (terminals usually emit ctrl+'_'). Undo last input edit.
+            KeyCode::Char('_') => {
+                if !app.pop_undo() {
+                    app.history.push(Turn::system(String::from("nothing to undo")));
+                }
+                app.exit_pending = None;
+                app.clear_pending = None;
+                return false;
+            }
+            // Ctrl+G — edit current input in $EDITOR. Suspends ratatui,
+            // launches the editor on a temp file, swallows the input
+            // back when the user saves and exits.
+            KeyCode::Char('g') => {
+                app.push_undo();
+                if let Err(e) = edit_in_external_editor(app) {
+                    app.history.push(Turn::system(format!("$EDITOR: {e}")));
+                }
+                app.exit_pending = None;
+                app.clear_pending = None;
+                return false;
+            }
             KeyCode::Char('c') => {
                 // First press: cancel active stream / clear input /
                 // dismiss overlay. Second press within 1.5s: exit.
@@ -1386,17 +1485,35 @@ fn handle_key(app: &mut AppState, k: KeyEvent) -> bool {
         }
     }
 
+    // Alt+P — cycle to the next cached local model. Quick shortcut
+    // for /model <next> when you have several GGUFs on disk.
+    if k.modifiers.contains(KeyModifiers::ALT) && matches!(k.code, KeyCode::Char('p') | KeyCode::Char('P')) {
+        app.cycle_model();
+        return false;
+    }
+
     match k.code {
         KeyCode::Enter => {
             if k.modifiers.contains(KeyModifiers::SHIFT) {
+                app.push_undo();
                 app.input.insert(app.cursor, '\n');
                 app.cursor += 1;
+            } else if app.cursor > 0
+                && app.input[..app.cursor].ends_with('\\')
+            {
+                // `\` + Enter → newline (alongside Shift+Enter). Convenient
+                // when Shift+Enter is intercepted by the terminal emulator.
+                app.push_undo();
+                let prev = prev_char_boundary(&app.input, app.cursor);
+                app.input.replace_range(prev..app.cursor, "\n");
+                app.cursor = prev + 1;
             } else {
                 app.submit();
             }
         }
         KeyCode::Backspace => {
             if app.cursor > 0 {
+                app.push_undo();
                 let prev = prev_char_boundary(&app.input, app.cursor);
                 app.input.drain(prev..app.cursor);
                 app.cursor = prev;
@@ -1404,6 +1521,7 @@ fn handle_key(app: &mut AppState, k: KeyEvent) -> bool {
         }
         KeyCode::Delete => {
             if app.cursor < app.input.len() {
+                app.push_undo();
                 let next = next_char_boundary(&app.input, app.cursor);
                 app.input.drain(app.cursor..next);
             }
@@ -1456,18 +1574,84 @@ fn handle_key(app: &mut AppState, k: KeyEvent) -> bool {
             if app.scroll_off == max_off { app.follow_tail = true; }
         }
         KeyCode::Char(c) => {
+            app.push_undo();
             app.input.insert(app.cursor, c);
             app.cursor += c.len_utf8();
+            app.clear_pending = None;
         }
         KeyCode::Esc => {
+            // Order of effects when ESC is pressed:
+            //   1. Stop an active stream.
+            //   2. Otherwise, double-tap to clear input within 600 ms.
             if app.is_streaming() {
                 app.streaming = None;
                 if let Some(t) = app.history.last_mut() { t.complete = true; }
+                app.clear_pending = None;
+            } else if !app.input.is_empty() {
+                let armed = app.clear_pending
+                    .map(|t| t.elapsed() < CLEAR_WINDOW)
+                    .unwrap_or(false);
+                if armed {
+                    app.push_undo();
+                    app.input.clear();
+                    app.cursor = 0;
+                    app.history_idx = None;
+                    app.sugg_idx = 0;
+                    app.clear_pending = None;
+                } else {
+                    app.clear_pending = Some(Instant::now());
+                }
             }
         }
         _ => {}
     }
     false
+}
+
+/// Suspend the TUI, write the current input to a temp file, run
+/// `$EDITOR` (default `vi`) on it, then re-enter the TUI and pull the
+/// edited contents back into `app.input`.
+///
+/// Restores the alt-screen + raw mode regardless of whether the
+/// editor exited cleanly. If anything goes wrong, the input is
+/// preserved (push_undo before this is called).
+fn edit_in_external_editor(app: &mut AppState) -> Result<()> {
+    use std::io::Write;
+    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
+    let mut tmp = std::env::temp_dir();
+    let pid = std::process::id();
+    tmp.push(format!("intelnav-prompt-{pid}.md"));
+    {
+        let mut f = std::fs::File::create(&tmp)
+            .with_context(|| format!("create {}", tmp.display()))?;
+        f.write_all(app.input.as_bytes())?;
+    }
+
+    // Tear down terminal state, run editor on the user's tty, restore.
+    disable_raw_mode().ok();
+    let mut stdout = io::stdout();
+    let _ = execute!(stdout, DisableBracketedPaste, LeaveAlternateScreen);
+
+    let status = std::process::Command::new(&editor)
+        .arg(&tmp)
+        .status()
+        .with_context(|| format!("spawn {editor}"))?;
+
+    enable_raw_mode().ok();
+    let _ = execute!(stdout, EnterAlternateScreen, EnableBracketedPaste);
+
+    if status.success() {
+        let s = std::fs::read_to_string(&tmp)
+            .with_context(|| format!("read {}", tmp.display()))?;
+        app.input  = s.trim_end_matches('\n').to_string();
+        app.cursor = app.input.len();
+        app.sugg_idx = 0;
+        app.history_idx = None;
+    } else {
+        app.history.push(Turn::system(format!("$EDITOR exited {status} — input unchanged")));
+    }
+    let _ = std::fs::remove_file(&tmp);
+    Ok(())
 }
 
 // ======================================================================
