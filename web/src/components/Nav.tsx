@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { Logo } from "@/components/Logo";
 
 const links = [
     { href: "/how-it-works/", label: "How it works" },
@@ -13,31 +14,36 @@ const links = [
 export function Nav() {
     return (
         <motion.header
-            initial={{ y: -20, opacity: 0 }}
-            animate={{ y: 0,   opacity: 1 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
+            initial={{ y: -16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
             className="sticky top-0 z-50"
             style={{
-                background: "color-mix(in srgb, var(--bg) 78%, transparent)",
+                background: "color-mix(in srgb, var(--bg) 70%, transparent)",
                 borderBottom: "1px solid var(--line)",
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
+                backdropFilter: "blur(14px) saturate(180%)",
+                WebkitBackdropFilter: "blur(14px) saturate(180%)",
             }}
         >
             <nav className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-8">
                 <Link
                     href="/"
-                    className="font-serif text-lg tracking-tight hover:opacity-80 transition-opacity"
-                    style={{ color: "var(--strong)" }}
+                    className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
                 >
-                    IntelNav
+                    <Logo size={26} />
+                    <span
+                        className="font-serif text-[19px] tracking-tight"
+                        style={{ color: "var(--strong)" }}
+                    >
+                        IntelNav
+                    </span>
                 </Link>
-                <ul className="hidden sm:flex gap-6 text-[14px]" style={{ color: "var(--muted)" }}>
+                <ul className="hidden sm:flex gap-7 text-[14px]" style={{ color: "var(--muted)" }}>
                     {links.map((l) => (
                         <li key={l.href}>
                             <Link
                                 href={l.href}
-                                className="transition-colors hover:text-[var(--strong)]"
+                                className="link-sweep transition-colors hover:text-[var(--strong)]"
                             >
                                 {l.label}
                             </Link>
@@ -49,7 +55,7 @@ export function Nav() {
                     href="https://github.com/IntelNav/intelnav"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm px-3 py-1.5 rounded-full transition-all hover:scale-[1.02]"
+                    className="text-sm px-3.5 py-1.5 rounded-full transition-all hover:scale-[1.03]"
                     style={{
                         color: "var(--strong)",
                         background: "var(--panel)",

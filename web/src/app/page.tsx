@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Aurora } from "@/components/Aurora";
+import { Hero } from "@/components/Hero";
 import { Typewriter } from "@/components/Typewriter";
 import { TerminalMock, TerminalLine } from "@/components/TerminalMock";
 import { NetworkGraph } from "@/components/NetworkGraph";
@@ -11,6 +11,7 @@ export default function Home() {
     return (
         <>
             <Hero />
+            <Tagline />
             <LiveDemo />
             <NetworkSection />
             <Features />
@@ -20,80 +21,22 @@ export default function Home() {
 }
 
 /* ────────────────────────────────────────────────────────────────── */
-
-function Hero() {
+/* A single big quote-style tagline, breathing room. Sets pace
+   between the hero and the dense terminal section. */
+function Tagline() {
     return (
-        <section className="relative overflow-hidden">
-            <Aurora />
-            <div className="relative z-10 max-w-6xl mx-auto px-6 pt-24 pb-20 sm:pt-32 sm:pb-28">
-                <motion.div
-                    initial={{ y: 12, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                    className="max-w-2xl"
-                >
-                    <p
-                        className="text-sm tracking-wider uppercase mb-6"
-                        style={{ color: "var(--accent)" }}
-                    >
-                        Decentralized inference
-                    </p>
-                    <h1
-                        className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05] tracking-tight"
-                        style={{ color: "var(--strong)" }}
-                    >
-                        Run language models on hardware <em className="italic">that's already running.</em>
-                    </h1>
-                    <p
-                        className="mt-7 text-lg sm:text-xl leading-relaxed max-w-xl"
-                        style={{ color: "var(--muted)" }}
-                    >
-                        IntelNav splits a model into layer-range slices, scatters them
-                        across volunteer hardware, and streams hidden states through the
-                        chain to answer a prompt. <span style={{ color: "var(--strong)" }}>
-                        No single peer holds the whole model.</span>
-                    </p>
-
-                    <div className="mt-10 flex flex-wrap gap-3">
-                        <Link
-                            href="/install/"
-                            className="px-5 py-3 rounded-full text-[15px] font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            style={{
-                                background: "var(--strong)",
-                                color: "var(--bg)",
-                            }}
-                        >
-                            Install →
-                        </Link>
-                        <Link
-                            href="/how-it-works/"
-                            className="px-5 py-3 rounded-full text-[15px] font-medium transition-colors"
-                            style={{
-                                background: "var(--panel)",
-                                color: "var(--strong)",
-                                border: "1px solid var(--line-2)",
-                            }}
-                        >
-                            How it works
-                        </Link>
-                    </div>
-
-                    <p
-                        className="mt-8 text-sm font-mono"
-                        style={{ color: "var(--faint)" }}
-                    >
-                        $&nbsp;<Typewriter
-                            text={[
-                                "curl -fsSL https://intelnav.net/install.sh | sh",
-                                "intelnav    # opens the TUI",
-                                "/models     # pick a slice to host",
-                            ]}
-                            delay={42}
-                            pause={2400}
-                        />
-                    </p>
-                </motion.div>
-            </div>
+        <section className="max-w-4xl mx-auto px-6 py-32 sm:py-44 text-center">
+            <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                className="font-serif text-3xl sm:text-4xl lg:text-5xl leading-[1.15] tracking-tight"
+                style={{ color: "var(--strong)" }}
+            >
+                Everyone running a node holds <em className="italic" style={{ color: "var(--accent)" }}>part of a model</em>.
+                Together, they hold them all.
+            </motion.p>
         </section>
     );
 }
@@ -103,29 +46,18 @@ function Hero() {
 function LiveDemo() {
     return (
         <section className="relative max-w-6xl mx-auto px-6 py-24 sm:py-32">
-            <div className="max-w-2xl mb-12">
-                <p
-                    className="text-sm tracking-wider uppercase mb-4"
-                    style={{ color: "var(--accent)" }}
-                >
-                    Two binaries, one chain
-                </p>
-                <h2
-                    className="font-serif text-3xl sm:text-4xl leading-tight tracking-tight"
-                    style={{ color: "var(--strong)" }}
-                >
-                    Chat from one terminal. Host from another.
-                </h2>
-                <p
-                    className="mt-4 text-lg leading-relaxed"
-                    style={{ color: "var(--muted)" }}
-                >
-                    <code>intelnav</code> is the chat client. <code>intelnav-node</code>
-                    {" "}is the host daemon. They share an identity but live in separate
-                    processes — closing the chat doesn't drop your slices off the
-                    network.
-                </p>
-            </div>
+            <SectionHeader
+                eyebrow="Two binaries, one chain"
+                title="Chat from one terminal. Host from another."
+                lede={
+                    <>
+                        <code>intelnav</code> is the chat client.{" "}
+                        <code>intelnav-node</code> is the host daemon. They share
+                        an identity but run as separate processes — closing the
+                        chat doesn&apos;t take your slices off the network.
+                    </>
+                }
+            />
 
             <div className="grid lg:grid-cols-2 gap-6">
                 <TerminalMock title="islam@laptop ~ — intelnav">
@@ -191,35 +123,18 @@ function LiveDemo() {
 function NetworkSection() {
     return (
         <section className="max-w-6xl mx-auto px-6 py-24 sm:py-32">
-            <motion.div
-                initial={{ y: 12, opacity: 0 }}
-                whileInView={{ y: 0, opacity: 1 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.6 }}
-                className="max-w-2xl mb-10"
-            >
-                <p
-                    className="text-sm tracking-wider uppercase mb-4"
-                    style={{ color: "var(--accent)" }}
-                >
-                    The chain
-                </p>
-                <h2
-                    className="font-serif text-3xl sm:text-4xl leading-tight tracking-tight"
-                    style={{ color: "var(--strong)" }}
-                >
-                    A model is a chain of layers. So is the network.
-                </h2>
-                <p
-                    className="mt-4 text-lg leading-relaxed"
-                    style={{ color: "var(--muted)" }}
-                >
-                    Hidden states travel from your machine through every peer that
-                    owns a slice of the model, in order, until the tail produces a
-                    token. Each hop is TCP + Noise + yamux; each peer's place is
-                    found via Kademlia.
-                </p>
-            </motion.div>
+            <SectionHeader
+                eyebrow="The chain"
+                title="A model is a chain of layers. So is the network."
+                lede={
+                    <>
+                        Hidden states travel from your machine through every peer
+                        that owns a slice of the model, in order, until the tail
+                        produces a token. Each hop is TCP + Noise + yamux; each
+                        peer&apos;s place is found via Kademlia.
+                    </>
+                }
+            />
             <NetworkGraph />
         </section>
     );
@@ -230,16 +145,11 @@ function NetworkSection() {
 function Features() {
     return (
         <section className="max-w-6xl mx-auto px-6 py-24 sm:py-28">
-            <motion.h2
-                initial={{ y: 12, opacity: 0 }}
-                whileInView={{ y: 0, opacity: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5 }}
-                className="font-serif text-3xl sm:text-4xl leading-tight tracking-tight max-w-xl mb-12"
-                style={{ color: "var(--strong)" }}
-            >
-                Built so the cost of joining stays small.
-            </motion.h2>
+            <SectionHeader
+                eyebrow="Architecture"
+                title="Built so the cost of joining stays small."
+                lede={null}
+            />
             <div className="grid md:grid-cols-2 gap-4">
                 {features.map((f, i) => (
                     <FeatureCard key={f.title} feature={f} delay={i * 0.06} />
@@ -261,21 +171,22 @@ function FeatureCard({
             initial={{ y: 16, opacity: 0 }}
             whileInView={{ y: 0, opacity: 1 }}
             viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
-            className="rounded-2xl p-6 transition-colors"
+            transition={{ duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={{ y: -2 }}
+            className="rounded-2xl p-6 transition-colors group"
             style={{
                 background: "var(--panel)",
                 border: "1px solid var(--line)",
             }}
         >
             <p
-                className="text-xs tracking-wider uppercase mb-3"
+                className="text-xs tracking-[0.2em] uppercase mb-3 font-mono transition-colors"
                 style={{ color: "var(--accent)" }}
             >
                 {feature.tag}
             </p>
             <h3
-                className="font-serif text-xl mb-2"
+                className="font-serif text-xl mb-2 tracking-tight"
                 style={{ color: "var(--strong)" }}
             >
                 {feature.title}
@@ -312,22 +223,30 @@ const features = [
 
 function InstallStrip() {
     return (
-        <section
-            className="max-w-6xl mx-auto px-6 py-20 my-12 rounded-3xl"
-            style={{
-                background: "var(--panel-2)",
-                border: "1px solid var(--line)",
-            }}
-        >
-            <div className="max-w-3xl mx-auto text-center">
+        <section className="relative max-w-6xl mx-auto px-6 py-20 my-16">
+            <div
+                className="rounded-3xl px-6 py-16 sm:px-12 sm:py-24 text-center relative overflow-hidden"
+                style={{
+                    background: "var(--panel)",
+                    border: "1px solid var(--line)",
+                }}
+            >
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute inset-0 -z-10 grid-bg"
+                    style={{ opacity: 0.6 }}
+                />
                 <h2
-                    className="font-serif text-3xl sm:text-4xl leading-tight tracking-tight"
+                    className="font-serif text-3xl sm:text-4xl lg:text-5xl leading-tight tracking-tight max-w-2xl mx-auto"
                     style={{ color: "var(--strong)" }}
                 >
                     Three lines on Linux. Pick a slice. Chat.
                 </h2>
                 <pre
-                    className="mt-8 mx-auto max-w-xl text-left rounded-md px-5 py-4 text-[13px] leading-relaxed font-mono overflow-x-auto"
+                    className="mt-10 mx-auto max-w-xl text-left rounded-md px-5 py-4 text-[13px] leading-relaxed font-mono overflow-x-auto"
                     style={{
                         background: "var(--bg)",
                         border: "1px solid var(--line)",
@@ -338,11 +257,15 @@ function InstallStrip() {
                     <span style={{ color: "var(--faint)" }}>$ </span>intelnav{"\n"}
                     <span style={{ color: "var(--faint)" }}>$ </span><span style={{ color: "var(--accent)" }}>/models</span>   <span style={{ color: "var(--faint)" }}># press &apos;c&apos; on a row to host</span>
                 </pre>
-                <div className="mt-8 flex justify-center gap-3">
+                <div className="mt-10 flex flex-wrap justify-center gap-3">
                     <Link
                         href="/install/"
-                        className="px-5 py-3 rounded-full text-[15px] font-medium transition-all hover:scale-[1.02]"
-                        style={{ background: "var(--strong)", color: "var(--bg)" }}
+                        className="px-5 py-3 rounded-full text-[15px] font-medium transition-all hover:scale-[1.03]"
+                        style={{
+                            background: "var(--accent)",
+                            color: "#ffffff",
+                            boxShadow: "0 8px 24px -8px rgba(99, 102, 241, 0.55)",
+                        }}
                     >
                         Full install guide
                     </Link>
@@ -362,5 +285,45 @@ function InstallStrip() {
                 </div>
             </div>
         </section>
+    );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
+
+function SectionHeader({
+    eyebrow,
+    title,
+    lede,
+}: {
+    eyebrow: string;
+    title: string;
+    lede: React.ReactNode;
+}) {
+    return (
+        <motion.div
+            initial={{ y: 14, opacity: 0 }}
+            whileInView={{ y: 0, opacity: 1 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="max-w-2xl mb-12"
+        >
+            <p
+                className="text-[12px] tracking-[0.2em] uppercase mb-4 font-mono"
+                style={{ color: "var(--accent)" }}
+            >
+                {eyebrow}
+            </p>
+            <h2
+                className="font-serif text-3xl sm:text-4xl leading-tight tracking-tight"
+                style={{ color: "var(--strong)" }}
+            >
+                {title}
+            </h2>
+            {lede && (
+                <p className="mt-4 text-lg leading-relaxed" style={{ color: "var(--muted)" }}>
+                    {lede}
+                </p>
+            )}
+        </motion.div>
     );
 }

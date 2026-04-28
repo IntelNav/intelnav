@@ -42,13 +42,13 @@ export const metadata: Metadata = {
         type: "website",
     },
     twitter: { card: "summary_large_image", title: "IntelNav" },
-    icons: { icon: "/favicon.svg" },
+    icons: { icon: "/logo.svg" },
 };
 
 export const viewport = {
     themeColor: [
-        { media: "(prefers-color-scheme: light)", color: "#faf9f5" },
-        { media: "(prefers-color-scheme: dark)",  color: "#181612" },
+        { media: "(prefers-color-scheme: light)", color: "#fafafd" },
+        { media: "(prefers-color-scheme: dark)",  color: "#0a0a13" },
     ],
 };
 
