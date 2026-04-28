@@ -1,21 +1,36 @@
 # Contributing to IntelNav
 
+Thanks for considering it. IntelNav is two binaries
+(`intelnav` chat client + `intelnav-node` host daemon) sharing one
+substantial library (`crates/app`) on top of a small set of leaf
+crates. Read [`docs/architecture.md`](docs/architecture.md) before
+your first non-trivial change — the workspace dependency diagram +
+runtime sequence diagram there are the fastest way in.
+
 ---
 
 ## First-time setup
 
 ```bash
-git clone git@github.com:IntelNav/IntelNav.git
-cd IntelNav
-bash scripts/provision.sh     # system deps + rust + workspace check
+git clone git@github.com:IntelNav/intelnav.git
+cd intelnav
+bash scripts/provision.sh         # system deps + rust + workspace check
+bash scripts/install-libllama.sh  # fetch a prebuilt libllama into the cache
 ```
 
-Supports Debian/Ubuntu, Fedora, Arch, macOS. For other platforms, see
-[`docs/QUICKSTART.md`](docs/QUICKSTART.md) §0 for the manual package
-list.
+`provision.sh` supports Debian/Ubuntu, Fedora, Arch, macOS. For other
+platforms install `build-essential`, `pkg-config`, `libssl-dev`, and
+the Rust toolchain manually.
 
-**MSRV: Rust 1.88.** The repo's `rust-toolchain.toml` pins `channel = "stable"`,
-so rustup users pick up a compatible version automatically.
+`install-libllama.sh` auto-detects your GPU vendor and pulls the
+matching prebuilt tarball from the latest
+[`IntelNav/llama.cpp`](https://github.com/IntelNav/llama.cpp) release
+into `~/.cache/intelnav/libllama/bin`. The runtime auto-discovers it
+on startup; you don't need to set `INTELNAV_LIBLLAMA_DIR` by hand.
+
+**MSRV: Rust 1.88.** The repo's `rust-toolchain.toml` pins
+`channel = "stable"`, so rustup users pick up a compatible version
+automatically.
 
 ---
 
@@ -49,9 +64,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 - **Protocol messages are additive.** If you add a field to a `Msg`
   variant, use `#[serde(default, skip_serializing_if = "Option::is_none")]`
   so proto-v1 peers still decode.
-- **Layer-split must stay bit-identical.** Any change to Qwen2 fork
-  paths must be verified with the `layer_split_matches_full` test
-  (max_abs_diff == 0 on q4_k_m).
+- **Layer-split must stay bit-identical.** Any change to the
+  layer-range forward path must keep
+  `cargo test -p intelnav-ggml --test bit_identical` passing (the
+  `five_scenarios_bit_identical` runner: max_abs_diff == 0 vs the
+  full-model forward on q4_k_m, across embed-only, head-only,
+  middle-slice, etc.).
 
 ---
 
@@ -84,7 +102,37 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 1. `cargo new --lib crates/<name>`.
 2. Add to `members = [...]` in the root `Cargo.toml`.
-3. Add a workspace-level path dep (`intelnav-<name> = { path = "crates/<name>" }`).
+3. Add a workspace-level path dep
+   (`intelnav-<name> = { path = "crates/<name>" }`).
 4. Write a one-paragraph `crates/<name>/README.md` following the
    pattern in the existing crates.
 5. Add `#![forbid(unsafe_code)]` unless you have a reason not to.
+
+---
+
+## Testing the TUI interactively
+
+The fastest way to exercise an end-to-end change:
+
+```bash
+cargo build --release -p intelnav-cli -p intelnav-node
+INTELNAV_RELAY_ONLY=1 ./target/release/intelnav
+```
+
+Inside the TUI: `/help` lists slash commands, `/keybindings` lists
+the key shortcuts, `/doctor` runs preflight inline. Logs go to
+`~/.local/state/intelnav/intelnav.log` while the TUI is up.
+
+For non-interactive smoke (no Ratatui):
+
+```bash
+echo "say hello" | ./target/release/intelnav --mode local ask \
+    --model qwen2.5-0.5b-instruct-q4_k_m
+```
+
+If you need to drive the daemon's control RPC by hand:
+
+```bash
+echo '{"method":"status"}' \
+    | nc -U ~/.local/share/intelnav/control.sock -w 1
+```
