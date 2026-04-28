@@ -66,6 +66,22 @@ use wrap::{
     transcript_scroll_to_top, visual_row_end, visual_row_start, wrap_visual, Segment,
 };
 
+/// Run an async future to completion from inside a sync TUI handler
+/// without panicking. The TUI's main loop is async (tokio multi-thread
+/// runtime), but slash-command handlers are sync `&mut self` methods.
+/// `futures::executor::block_on` from inside a tokio worker panics with
+/// "Cannot start a runtime from within a runtime."
+///
+/// `block_in_place` tells the multi-thread runtime "this worker is
+/// going synchronous for a moment, move other tasks elsewhere."
+/// `Handle::current().block_on(future)` then drives the future to
+/// completion on this same thread.
+fn run_blocking<F: std::future::Future>(fut: F) -> F::Output {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(fut)
+    })
+}
+
 pub async fn run(
     config: &Config,
     mode: RunMode,
@@ -643,7 +659,7 @@ impl AppState {
         use crate::control;
         let sock = control::default_socket_path();
         let req = control::Request::ListHosted;
-        let result: Result<control::Response, _> = futures::executor::block_on(async {
+        let result: Result<control::Response, _> = run_blocking(async move {
             control::call(&sock, req).await
         });
         let msg = match result {
@@ -690,7 +706,7 @@ impl AppState {
         use crate::control;
         let sock = control::default_socket_path();
         let req = control::Request::Leave { cid: cid.clone(), start, end };
-        let result: Result<control::Response, _> = futures::executor::block_on(async {
+        let result: Result<control::Response, _> = run_blocking(async move {
             control::call(&sock, req).await
         });
         let msg = match result {
@@ -710,11 +726,11 @@ impl AppState {
         let action = parts.next().unwrap_or("status");
         let msg = match action {
             "status" => format!("service: {:?}", service::status()),
-            "install" => match futures::executor::block_on(service::install()) {
+            "install" => match run_blocking(service::install()) {
                 Ok(())  => "service: installed and started.".into(),
                 Err(e)  => format!("service install: {e}"),
             },
-            "uninstall" => match futures::executor::block_on(service::uninstall()) {
+            "uninstall" => match run_blocking(service::uninstall()) {
                 Ok(())  => "service: uninstalled.".into(),
                 Err(e)  => format!("service uninstall: {e}"),
             },
