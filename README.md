@@ -134,6 +134,15 @@ intelnav/
   while the flow gets shaken out in the wild. macOS and Windows
   will follow once Linux is stable.
 
+## Related repos
+
+- [`IntelNav/llama.cpp`](https://github.com/IntelNav/llama.cpp) — our
+  patched libllama fork. Layer-range forward + partial-model loader,
+  CI builds prebuilt tarballs for `intelnav-node` to dlopen.
+- [`IntelNav/web`](https://github.com/IntelNav/web) — the
+  [intelnav.net](https://intelnav.net) site. Next.js + Tailwind, static
+  export, deployed to seed1's nginx.
+
 ## License
 
 Apache-2.0.
