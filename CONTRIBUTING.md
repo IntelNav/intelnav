@@ -44,8 +44,8 @@ cargo clippy --workspace --all-targets -- -D warnings
   `#[allow(unsafe_code)]` inline). Don't introduce `unsafe` elsewhere
   without explicit justification.
 - **`core` has no heavy deps.** Shape-only types. Keep it that way.
-- **`runtime` is the only crate that depends on `ggml`/`libllama`.** The
-  wire and registry stay inference-backend agnostic.
+- **`runtime` is the only crate that depends on `ggml`/`libllama`.**
+  `wire`, `crypto`, `net`, `core` stay inference-backend agnostic.
 - **Protocol messages are additive.** If you add a field to a `Msg`
   variant, use `#[serde(default, skip_serializing_if = "Option::is_none")]`
   so proto-v1 peers still decode.
@@ -75,8 +75,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 - The wire protocol is normative. Changes to `Msg` must update
   [`specs/protocol-v1.md`](specs/protocol-v1.md).
-- The registry is normative. Changes to routes / envelope / hysteresis
-  must update [`specs/shard-registry-v1.md`](specs/shard-registry-v1.md).
 - The threat model is normative. Security-relevant changes must
   update [`specs/security-v1.md`](specs/security-v1.md).
 

@@ -55,12 +55,6 @@ enum Command {
         prompt: Option<String>,
     },
 
-    /// Bridge to the Python shard server.
-    Node {
-        #[arg(long, default_value = "/tmp/intelnav_shard.sock")]
-        shard: String,
-    },
-
     /// List local models in `models_dir`.
     Models {
         #[arg(long)]
@@ -168,7 +162,6 @@ async fn main() -> Result<()> {
             };
             cmd::ask(&config, config.mode, model, &text).await
         }
-        Command::Node { shard } => cmd::node(&config, &shard).await,
         Command::Models { json } => cmd::models(&config, json).await,
         Command::Doctor          => cmd::doctor(&config).await,
         Command::Init { force }  => cmd::init(force).await,

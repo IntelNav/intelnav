@@ -351,21 +351,3 @@ fn identity_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("./peer.key"))
 }
 
-// ======================================================================
-//  node — bridge to the Python shard server
-// ======================================================================
-
-pub async fn node(_cfg: &Config, shard: &str) -> Result<()> {
-    println!("intelnav node — contributor bridge");
-    println!();
-    println!("The contributor shard server runs as a Python process that embeds");
-    println!("llama.cpp. It communicates with the CLI over:");
-    println!();
-    println!("    {shard}");
-    println!();
-    println!("To start it:");
-    println!();
-    println!("    cd python/intelnav_shard");
-    println!("    python -m intelnav_shard.shard_server --socket {shard}");
-    Ok(())
-}
