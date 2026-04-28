@@ -6,6 +6,7 @@ import { Hero } from "@/components/Hero";
 import { Typewriter } from "@/components/Typewriter";
 import { TerminalMock, TerminalLine } from "@/components/TerminalMock";
 import { NetworkGraph } from "@/components/NetworkGraph";
+import { CopyableShell } from "@/components/CopyableShell";
 
 export default function Home() {
     return (
@@ -21,8 +22,8 @@ export default function Home() {
 }
 
 /* ────────────────────────────────────────────────────────────────── */
-/* A single big quote-style tagline, breathing room. Sets pace
-   between the hero and the dense terminal section. */
+/* A single declarative line that expands the hero, doesn't restate.
+   Anti-platform / anti-data-center stance, framed in plain words. */
 function Tagline() {
     return (
         <section className="max-w-4xl mx-auto px-6 py-32 sm:py-44 text-center">
@@ -34,8 +35,9 @@ function Tagline() {
                 className="font-serif text-3xl sm:text-4xl lg:text-5xl leading-[1.15] tracking-tight"
                 style={{ color: "var(--strong)" }}
             >
-                Everyone running a node holds <em className="italic" style={{ color: "var(--accent)" }}>part of a model</em>.
-                Together, they hold them all.
+                No data centers. No moats. Just hardware doing math for{" "}
+                <em className="italic" style={{ color: "var(--accent)" }}>strangers</em>
+                {" "}— yours included.
             </motion.p>
         </section>
     );
@@ -60,7 +62,7 @@ function LiveDemo() {
             />
 
             <div className="grid lg:grid-cols-2 gap-6">
-                <TerminalMock title="islam@laptop ~ — intelnav">
+                <TerminalMock title="user@host ~ — intelnav">
                     <TerminalLine tag="sys" tone="muted">
                         Welcome to intelnav 0.1.0 · proto v1.
                     </TerminalLine>
@@ -80,7 +82,7 @@ function LiveDemo() {
                     </TerminalLine>
                 </TerminalMock>
 
-                <TerminalMock title="islam@laptop ~ — intelnav-node" delay={0.15}>
+                <TerminalMock title="user@host ~ — intelnav-node" delay={0.15}>
                     <TerminalLine tag="INFO" tone="success">
                         libp2p node up · /ip4/0.0.0.0/tcp/4001
                     </TerminalLine>
@@ -245,18 +247,16 @@ function InstallStrip() {
                 >
                     Three lines on Linux. Pick a slice. Chat.
                 </h2>
-                <pre
-                    className="mt-10 mx-auto max-w-xl text-left rounded-md px-5 py-4 text-[13px] leading-relaxed font-mono overflow-x-auto"
-                    style={{
-                        background: "var(--bg)",
-                        border: "1px solid var(--line)",
-                        color: "var(--fg)",
-                    }}
-                >
-                    <span style={{ color: "var(--faint)" }}>$ </span>curl -fsSL https://intelnav.net/install.sh | sh{"\n"}
-                    <span style={{ color: "var(--faint)" }}>$ </span>intelnav{"\n"}
-                    <span style={{ color: "var(--faint)" }}>$ </span><span style={{ color: "var(--accent)" }}>/models</span>   <span style={{ color: "var(--faint)" }}># press &apos;c&apos; on a row to host</span>
-                </pre>
+                <div className="mt-10 mx-auto max-w-xl flex justify-center">
+                    <CopyableShell text="curl -fsSL https://intelnav.net/install.sh | sh" />
+                </div>
+                <p className="mt-4 text-sm font-mono" style={{ color: "var(--faint)" }}>
+                    then <code style={{ color: "var(--strong)" }}>intelnav</code>{" "}
+                    →{" "}
+                    <code style={{ color: "var(--accent)" }}>/models</code>{" "}
+                    → press <code style={{ color: "var(--strong)" }}>c</code>{" "}
+                    on a row to host.
+                </p>
                 <div className="mt-10 flex flex-wrap justify-center gap-3">
                     <Link
                         href="/install/"

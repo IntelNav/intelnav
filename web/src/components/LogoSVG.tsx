@@ -83,26 +83,59 @@ export function LogoSVG({
 
         if (instant) return;
 
-        const tl = gsap.timeline({ delay: 0.45 });
-        // Trace each path's outline. `each: 0.025` means the next
-        // path starts 25 ms after the previous — across 65 paths the
-        // trail end is about 1.6 s after the head, which lands well
-        // visually (head finishes near the end of the trail).
+        // Halo gets a brief intensity flare timed with the fill phase
+        // — like the mark "lights up" the moment the strokes commit
+        // to color. We grab the .logo-glow ancestor (set by Hero).
+        const halo =
+            containerRef.current.closest<HTMLElement>(".logo-glow") ?? null;
+
+        // Slight final pose: settle scale down by 1 % so the mark
+        // visibly "lands" at rest (rather than pose-locking on the
+        // overshoot that the eased trace can leave).
+        const tl = gsap.timeline({ delay: 0.4 });
+
+        // Phase 1 — trace each path's outline. `each: 0.022` keeps
+        // the trail tight (≈1.4 s end-to-end across 65 paths). Ease
+        // chosen to feel like a brushstroke: slow start, fast tail.
         tl.to(paths, {
             strokeDashoffset: 0,
-            duration: 1.6,
-            ease: "power2.inOut",
-            stagger: { each: 0.025, from: "start" },
-        }).to(paths, {
+            duration: 1.5,
+            ease: "power3.out",
+            stagger: { each: 0.022, from: "start" },
+        });
+
+        // Phase 2 — fill blooms in behind the strokes, halo flares.
+        tl.to(paths, {
             fillOpacity: 1,
-            duration: 0.55,
-            ease: "power1.in",
-            stagger: { each: 0.018, from: "start" },
-        }, "-=0.75").to(paths, {
-            strokeOpacity: 0,
             duration: 0.5,
-            ease: "power1.out",
-        }, "-=0.25");
+            ease: "power1.in",
+            stagger: { each: 0.014, from: "start" },
+        }, "-=0.6");
+
+        if (halo) {
+            tl.fromTo(halo,
+                { "--glow-boost": 0 } as gsap.TweenVars,
+                {
+                    "--glow-boost": 1,
+                    duration: 0.55,
+                    ease: "power2.out",
+                    onComplete: () => {
+                        gsap.to(halo, {
+                            "--glow-boost": 0,
+                            duration: 1.2,
+                            ease: "power2.inOut",
+                        } as gsap.TweenVars);
+                    },
+                } as gsap.TweenVars,
+            "-=0.3");
+        }
+
+        // Phase 3 — strokes recede, mark settles into its final pose.
+        tl.to(paths, {
+            strokeOpacity: 0,
+            duration: 0.6,
+            ease: "power2.out",
+        }, "-=0.2");
 
         return () => { tl.kill(); };
     }, [svgText, instant]);

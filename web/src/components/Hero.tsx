@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 import { LogoSVG } from "@/components/LogoSVG";
-import { Typewriter } from "@/components/Typewriter";
+import { CopyableShell } from "@/components/CopyableShell";
 
 export function Hero() {
     // Scroll-driven parallax. The logo rises slightly faster than the
@@ -117,23 +117,14 @@ export function Hero() {
                         <Spec>mac · win soon</Spec>
                     </motion.div>
 
-                    <motion.p
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
+                    <motion.div
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, delay: 1.6 }}
-                        className="mt-10 text-sm font-mono"
-                        style={{ color: "var(--faint)" }}
+                        className="mt-10"
                     >
-                        $&nbsp;<Typewriter
-                            text={[
-                                "curl -fsSL https://intelnav.net/install.sh | sh",
-                                "intelnav    # opens the TUI",
-                                "/models     # pick a slice to host",
-                            ]}
-                            delay={42}
-                            pause={2200}
-                        />
-                    </motion.p>
+                        <CopyableShell text="curl -fsSL https://intelnav.net/install.sh | sh" />
+                    </motion.div>
                 </motion.div>
 
                 {/* Logo column. The reveal is GSAP-driven inside
@@ -148,7 +139,7 @@ export function Hero() {
                     className="relative flex justify-center lg:justify-end items-center"
                 >
                     <div className="logo-glow relative">
-                        <LogoSVG size={380} className="select-none" />
+                        <LogoSVG size={480} className="select-none" />
                     </div>
                 </motion.div>
             </div>

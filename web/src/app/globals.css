@@ -121,24 +121,30 @@ html, body {
     66%      { transform: translate3d(3%, -2%, 0) scale(0.95); }
 }
 
-/* Logo glow — soft indigo halo behind the mark on the hero. */
+/* Logo glow — soft indigo halo behind the mark on the hero.
+ *
+ * `--glow-boost` is animated by GSAP during the reveal so the halo
+ * briefly flares as the fill phase commits, then relaxes back to the
+ * idle pulse. Outside of that the slow CSS pulse runs continuously. */
 .logo-glow {
     position: relative;
+    --glow-boost: 0;
 }
 .logo-glow::before {
     content: "";
     position: absolute;
-    inset: -20%;
+    inset: -25%;
     border-radius: 50%;
     background: radial-gradient(circle, var(--accent) 0%, transparent 60%);
-    filter: blur(40px);
-    opacity: 0.35;
+    filter: blur(50px);
+    opacity: calc(0.30 + 0.45 * var(--glow-boost));
+    transform: scale(calc(1 + 0.15 * var(--glow-boost)));
     z-index: -1;
-    animation: pulse 5s ease-in-out infinite;
+    animation: pulse 6s ease-in-out infinite;
 }
 @keyframes pulse {
-    0%, 100% { opacity: 0.25; transform: scale(1); }
-    50%      { opacity: 0.45; transform: scale(1.06); }
+    0%, 100% { opacity: 0.22; }
+    50%      { opacity: 0.42; }
 }
 
 /* Underline-sweep on hover — used on text links. The link sits
