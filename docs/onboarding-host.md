@@ -12,7 +12,7 @@ or chunk listener to launch — it's all one daemon (`intelnav-node`).
   installer or `cargo build --release -p intelnav-cli -p intelnav-node`.
 - A libllama tarball auto-discovered at
   `~/.cache/intelnav/libllama/bin/`. The installer fetches one for
-  your platform; from source, run `bash scripts/install-libllama.sh`.
+  your platform; from source, run `bash scripts/install.sh --only-libllama`.
 - `intelnav doctor` verifies both.
 
 ## Pick what to host

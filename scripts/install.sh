@@ -20,6 +20,10 @@
 #       fall back to cpu. Pass --backend cpu to opt out of GPU.
 #   --prefix <dir>
 #       Where binaries + libllama go. Default: $HOME/.local/intelnav.
+#   --only-libllama
+#       Skip the intelnav binary download; only fetch libllama into
+#       the cache. Useful if you built intelnav from source with
+#       cargo and just need the runtime library.
 #   --no-rc
 #       Don't edit ~/.bashrc / ~/.zshrc. You'll handle PATH yourself.
 #   --no-doctor
@@ -35,6 +39,7 @@ LIBLLAMA_CACHE="${HOME}/.cache/intelnav/libllama"
 BACKEND=""
 EDIT_RC=1
 RUN_DOCTOR=1
+ONLY_LIBLLAMA=0
 INTELNAV_TAG="latest"
 LIBLLAMA_TAG="latest"
 
@@ -56,8 +61,9 @@ while [ $# -gt 0 ]; do
         --libllama-tag)  LIBLLAMA_TAG="$2";    shift 2 ;;
         --no-rc)         EDIT_RC=0;            shift   ;;
         --no-doctor)     RUN_DOCTOR=0;         shift   ;;
+        --only-libllama) ONLY_LIBLLAMA=1;      shift   ;;
         -h|--help)
-            sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) die "unknown option: $1" ;;
@@ -150,10 +156,12 @@ gh_asset_url() {
         | head -1
 }
 
-msg "resolving intelnav-cli tarball ($INTELNAV_TAG, $OS_ARCH)"
-INTELNAV_URL=$(gh_asset_url "$INTELNAV_REPO" "$INTELNAV_TAG" "intelnav-${OS_ARCH}-")
-[ -n "$INTELNAV_URL" ] || die "no intelnav-cli asset for $OS_ARCH on tag $INTELNAV_TAG"
-ok "$INTELNAV_URL"
+if [ "$ONLY_LIBLLAMA" = 0 ]; then
+    msg "resolving intelnav-cli tarball ($INTELNAV_TAG, $OS_ARCH)"
+    INTELNAV_URL=$(gh_asset_url "$INTELNAV_REPO" "$INTELNAV_TAG" "intelnav-${OS_ARCH}-")
+    [ -n "$INTELNAV_URL" ] || die "no intelnav-cli asset for $OS_ARCH on tag $INTELNAV_TAG"
+    ok "$INTELNAV_URL"
+fi
 
 msg "resolving libllama tarball ($LIBLLAMA_TAG, $OS_ARCH, $BACKEND)"
 LIBLLAMA_URL=$(gh_asset_url "$LLAMA_REPO" "$LIBLLAMA_TAG" "libllama-${OS_ARCH}-${BACKEND}-")
@@ -168,20 +176,25 @@ ok "$LIBLLAMA_URL"
 STAGE=$(mktemp -d) || die "mktemp failed"
 trap 'rm -rf "$STAGE"' EXIT
 
-msg "downloading intelnav-cli"
-$FETCH "$INTELNAV_URL" > "$STAGE/intelnav.tar.gz" \
-    || die "download failed"
+if [ "$ONLY_LIBLLAMA" = 0 ]; then
+    msg "downloading intelnav-cli"
+    $FETCH "$INTELNAV_URL" > "$STAGE/intelnav.tar.gz" \
+        || die "download failed"
+fi
 msg "downloading libllama"
 $FETCH "$LIBLLAMA_URL" > "$STAGE/libllama.tar.gz" \
     || die "download failed"
 
-mkdir -p "$PREFIX" "$LIBLLAMA_CACHE"
+mkdir -p "$LIBLLAMA_CACHE"
 # `--strip-components=1` drops the top-level `intelnav-<os>-<sha>`
 # / `libllama-<os>-<backend>-<sha>` directory name so the resulting
 # layout stays stable across upgrades.
-tar xzf "$STAGE/intelnav.tar.gz" -C "$PREFIX" --strip-components=1
+if [ "$ONLY_LIBLLAMA" = 0 ]; then
+    mkdir -p "$PREFIX"
+    tar xzf "$STAGE/intelnav.tar.gz" -C "$PREFIX" --strip-components=1
+    ok "unpacked to $PREFIX"
+fi
 tar xzf "$STAGE/libllama.tar.gz" -C "$LIBLLAMA_CACHE" --strip-components=1
-ok "unpacked to $PREFIX"
 ok "libllama at $LIBLLAMA_CACHE/bin"
 
 # ---------- rc-file wiring -----------------------------------------
@@ -204,13 +217,15 @@ install_rc() {
     ok "added intelnav block to $rc"
 }
 
-if [ "$EDIT_RC" = 1 ]; then
+if [ "$EDIT_RC" = 1 ] && [ "$ONLY_LIBLLAMA" = 0 ]; then
     install_rc "$HOME/.bashrc"
     install_rc "$HOME/.zshrc"
     install_rc "$HOME/.config/fish/config.fish"
-    # For the current shell session — user doesn't need to source rc.
+    # For the current shell session: caller doesn't need to source rc.
     export PATH="$PREFIX/bin:$PATH"
     export INTELNAV_LIBLLAMA_DIR="$LIBLLAMA_CACHE/bin"
+elif [ "$ONLY_LIBLLAMA" = 1 ]; then
+    ok "libllama-only install; no PATH edit needed"
 else
     warn "skipped rc-file edits (--no-rc). You'll need to:"
     printf '         %s\n' "$PATH_LINE"
@@ -218,16 +233,18 @@ else
 fi
 
 # ---------- doctor --------------------------------------------------
-if [ "$RUN_DOCTOR" = 1 ]; then
+if [ "$RUN_DOCTOR" = 1 ] && [ "$ONLY_LIBLLAMA" = 0 ]; then
     msg "running intelnav doctor"
-    # Call intelnav directly so this works even before the user
+    # Call intelnav directly so this works even before the caller
     # sources their rc file in a new shell.
     INTELNAV_LIBLLAMA_DIR="$LIBLLAMA_CACHE/bin" "$PREFIX/bin/intelnav" doctor || true
 fi
 
 msg "done."
-ok "intelnav installed to $PREFIX"
+if [ "$ONLY_LIBLLAMA" = 0 ]; then
+    ok "intelnav installed to $PREFIX"
+fi
 ok "libllama at $LIBLLAMA_CACHE/bin"
-if [ "$EDIT_RC" = 1 ]; then
+if [ "$EDIT_RC" = 1 ] && [ "$ONLY_LIBLLAMA" = 0 ]; then
     printf '    open a new shell (or `source ~/.bashrc`) to pick up PATH changes.\n'
 fi

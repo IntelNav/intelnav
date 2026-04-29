@@ -21,7 +21,7 @@ time looks like, and how to choose between **hosting a slice** and
     ```
 
 - A libllama tarball. The installer fetches one for your platform +
-  GPU vendor automatically. From source: `bash scripts/install-libllama.sh`.
+  GPU vendor automatically. From source: `bash scripts/install.sh --only-libllama`.
 
 That's it. `intelnav doctor` runs every preflight and tells you what's
 missing if anything is.
@@ -171,7 +171,7 @@ worth remembering:
   running. Run `/service install` (or `intelnav-node` in another
   terminal for ad-hoc).
 - **`intelnav doctor` reports missing libllama.** Run
-  `bash scripts/install-libllama.sh` (or pass
+  `bash scripts/install.sh --only-libllama` (or pass
   `INTELNAV_LIBLLAMA_DIR=/path/to/bin` if you already have one).
 - **ROCm error: invalid device function.** Your card's `gfx` arch
   isn't covered by the libllama tarball. The runtime auto-sets
