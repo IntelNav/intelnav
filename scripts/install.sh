@@ -3,10 +3,10 @@
 #
 # IntelNav installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/IntelNav/IntelNav/main/scripts/install.sh | sh
+#   curl -fsSL https://intelnav.net/install.sh | sh
 #
 # Detects OS + arch, picks the right intelnav tarball from
-# github.com/IntelNav/IntelNav/releases, picks the right libllama
+# github.com/IntelNav/intelnav/releases, picks the right libllama
 # tarball from github.com/IntelNav/llama.cpp/releases, unpacks both
 # into `$HOME/.local/intelnav/` + `$HOME/.cache/intelnav/libllama/`,
 # adds the binary to PATH, and runs `intelnav doctor`.
@@ -38,7 +38,7 @@ RUN_DOCTOR=1
 INTELNAV_TAG="latest"
 LIBLLAMA_TAG="latest"
 
-INTELNAV_REPO="IntelNav/IntelNav"
+INTELNAV_REPO="IntelNav/intelnav"
 LLAMA_REPO="IntelNav/llama.cpp"
 
 # ---------- tiny printing helpers ----------------------------------
