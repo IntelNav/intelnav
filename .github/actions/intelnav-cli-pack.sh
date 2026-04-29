@@ -9,9 +9,8 @@
 #     └─ intelnav-<os-arch>-<short_sha>/
 #        ├─ bin/
 #        │   ├─ intelnav (or intelnav.exe)
+#        │   ├─ intelnav-node
 #        │   ├─ intelnav-chunk
-#        │   ├─ pipe_peer
-#        │   ├─ pipe_driver
 #        │   └─ bench_chain
 #        ├─ LICENSE
 #        ├─ README.md
@@ -49,6 +48,7 @@ mkdir -p "${PKG_ROOT}/bin"
 copy_one() {
     local src_dir="$1"
     local name="$2"
+    local required="${3:-required}"
     for ext in "" ".exe"; do
         local src="${src_dir}/${name}${ext}"
         if [[ -f "$src" ]]; then
@@ -56,12 +56,19 @@ copy_one() {
             return 0
         fi
     done
+    if [[ "$required" == "optional" ]]; then
+        echo "intelnav-cli-pack: skipping optional binary ${name} (not built for this platform)" >&2
+        return 0
+    fi
     echo "intelnav-cli-pack: missing binary ${name} (looked in ${src_dir})" >&2
     return 1
 }
 
 copy_one target/release          intelnav
-copy_one target/release          intelnav-node
+# intelnav-node currently only ships on linux — its host-daemon
+# wiring (systemd user units, pkexec) is linux-specific. Make it
+# optional so macos / windows tarballs still build (chat client only).
+copy_one target/release          intelnav-node  optional
 copy_one target/release          intelnav-chunk
 copy_one target/release/examples bench_chain
 
@@ -81,16 +88,15 @@ cat > "${PKG_ROOT}/README.md" <<EOF
 # intelnav — prebuilt binaries
 
 Built from commit \`${SHA}\` of
-\`https://github.com/IntelNav/IntelNav\`.
+\`https://github.com/IntelNav/intelnav\`.
 
 Platform: **${OS_ARCH}**
 
 ## What's here
 
-* \`bin/intelnav\` — the main CLI. Run \`intelnav doctor\` first.
-* \`bin/intelnav-chunk\` — Path B model chunker / fetcher / serve.
-* \`bin/pipe_peer\` — join a swarm as a peer serving a layer range.
-* \`bin/pipe_driver\` — drive a pipeline manually (dev/debug).
+* \`bin/intelnav\` — the main chat-client CLI. Run \`intelnav doctor\` first.
+* \`bin/intelnav-node\` — host daemon (libp2p + chunk server + forward + control).
+* \`bin/intelnav-chunk\` — Path B model chunker / fetcher / multi-shard chunk server.
 * \`bin/bench_chain\` — local performance harness.
 
 ## Pairing with libllama

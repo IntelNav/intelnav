@@ -43,14 +43,6 @@ name = "probe"
 path = "examples/probe.rs"
 
 [[example]]
-name = "pipe_peer"
-path = "examples/pipe_peer.rs"
-
-[[example]]
-name = "pipe_driver"
-path = "examples/pipe_driver.rs"
-
-[[example]]
 name = "bench_chain"
 path = "examples/bench_chain.rs"
 

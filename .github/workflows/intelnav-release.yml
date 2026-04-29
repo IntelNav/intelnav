@@ -97,7 +97,7 @@ jobs:
             -p intelnav-cli --bin intelnav \
             -p intelnav-model-store --features serve,p2p --bin intelnav-chunk
           cargo build --release \
-            -p intelnav-runtime --example pipe_peer --example pipe_driver --example bench_chain
+            -p intelnav-runtime --example bench_chain
 
       - name: Package
         shell: bash
@@ -134,7 +134,7 @@ jobs:
             -p intelnav-cli --bin intelnav \
             -p intelnav-model-store --features serve,p2p --bin intelnav-chunk
           cargo build --release \
-            -p intelnav-runtime --example pipe_peer --example pipe_driver --example bench_chain
+            -p intelnav-runtime --example bench_chain
 
       - name: Package
         shell: bash
@@ -150,8 +150,13 @@ jobs:
   # tag and on workflow_dispatch unless `make_release` is set.
   # ---------------------------------------------------------------------
   publish-release:
+    # Wait for all three target jobs but only require linux-x64 to
+    # succeed. macos / windows are nice-to-have in 0.1.x — if either
+    # fails we still ship a usable Linux release.
     needs: [linux-x64, macos-arm64, windows-x64]
-    if: startsWith(github.ref, 'refs/tags/intelnav-cli-v') || inputs.make_release
+    if: |
+      always() && needs.linux-x64.result == 'success' &&
+      (startsWith(github.ref, 'refs/tags/intelnav-cli-v') || inputs.make_release)
     runs-on: ubuntu-22.04
     permissions:
       contents:     write
