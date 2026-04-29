@@ -2,19 +2,6 @@
   <img src="docs/assets/banner.png" alt="IntelNav — decentralized, pipeline-parallel LLM inference" width="100%">
 </p>
 
-<h1 align="center">IntelNav</h1>
-
-<p align="center">
-  <strong>The model is the network.</strong><br>
-  <a href="https://intelnav.net">intelnav.net</a> ·
-  <a href="https://intelnav.net/demo/">live demo</a> ·
-  <a href="https://intelnav.net/install/">install</a> ·
-  <a href="https://intelnav.net/sovereignty/">sovereignty</a> ·
-  <a href="docs/architecture.md">architecture</a>
-</p>
-
----
-
 IntelNav splits a model into layer-range slices, scatters them across
 volunteer hardware, and streams hidden states through the chain to
 answer a prompt. **No single peer holds the whole model.** Slices are
